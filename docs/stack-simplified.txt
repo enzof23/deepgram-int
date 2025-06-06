@@ -1,0 +1,27 @@
+**Frontend:**
+* **Framework:** Next.js (or even simple HTML/CSS/JS)
+* **Real-time Client:** Socket.IO Client
+
+**Backend:**
+* **Runtime/Framework:** A single Node.js / Express.js server
+* **Real-time Server:** Socket.IO
+
+**STT API:**
+* **Deepgram**
+
+**What We Are Postponing (The "Not Now" List)**
+
+Postponed: Confluent (Kafka) and Redis
+Reason: This is the biggest simplification. We will replace this entire data streaming pipeline with Socket.IO directly. It's less robust at massive scale, but perfect for an MVP.
+
+Postponed: Separate Backend Microservices
+Reason: We will use a single, simple Node.js server that does everything, dramatically reducing setup time.
+
+Postponed: Database (Neon/Drizzle) and Storage (AWS S3)
+Reason: The MVP will not save transcripts or create user accounts. All data is ephemeral and lives only for the duration of the live session.
+
+Postponed: Authentication (Clerk)
+Reason: To keep it simple, we'll have one public "room." No logins are required.
+
+Postponed: Testing (Jest/Cypress) and CI/CD (GitHub Actions)
+Reason: For speed, you will test and deploy manually.

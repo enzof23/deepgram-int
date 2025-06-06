@@ -1,0 +1,36 @@
+**Frontend**
+
+* **Framework:** Next.js
+* **Language:** Typescript
+* **Styling:** TailwindCSS
+* **UI components:** shadcn/ui
+* **Real-time Client:** socket.io client
+
+**Backend (Services)**
+
+* **Runtime:** Node.js
+* **Framework:** Express.js (used to build the individual services below)
+	* **Web API:** Handles user requests like creating classrooms, fetching saved transcripts, managing user data, etc.
+	* **Producer Service:** Ingests audio from the STT API, batches it, and produces it to Confluent.
+	* **Consumer Service:** Consumes from Confluent and pushes captions to clients via socket.io.
+
+**Core Infra**
+
+* **Authentication:** Clerk
+* **Database:** Neon (PostgreSQL)
+* **Streaming:** Confluent (Kafka)
+* **File Storage:** AWS S3 to store transcripts as JSON
+* **Caching & Session Store:** Redis (for managing the in-progress transcript and other temporary data)
+
+**DevOps**
+
+* **CI/CD Pipelines:** Github Actions
+* **Unit test:** Jest
+* **E2E test:** Cypress
+
+**Dev Libraries**
+
+* **ORM:** Drizzle
+* **Storage SDK:** AWS SDK (for uploading/downloading from S3)
+* **Streaming SDK:** a Kafka client library for Node.js (eg kafkajs)
+* **Caching SDK:** a Redis client library for Node.js (eg ioredis)

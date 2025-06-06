@@ -1,0 +1,1026 @@
+TITLE: Initializing Deepgram Client in JavaScript
+DESCRIPTION: This snippet initializes the Deepgram client using an API key and a custom mock API URL. It demonstrates how to configure global fetch options for the client. The initialized client instance is then logged to the console.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/examples/browser-prerecorded/index.html#_snippet_0
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { createClient } = deepgram; const _deepgram = createClient("deepgram-api-key", { global: { fetch: { options: { url: "https://api.mock.deepgram.com", }, }, }, }); console.log("Deepgram Instance: ", _deepgram);
+```
+
+----------------------------------------
+
+TITLE: Installing Deepgram JavaScript SDK
+DESCRIPTION: This snippet demonstrates how to install the Deepgram JavaScript SDK using npm or yarn. It adds the SDK package to your project's dependencies, allowing you to integrate Deepgram's speech and language AI capabilities.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_0
+
+LANGUAGE: bash
+CODE:
+```
+npm install @deepgram/sdk
+# - or -
+# yarn add @deepgram/sdk
+```
+
+----------------------------------------
+
+TITLE: Initializing Deepgram Client in JavaScript
+DESCRIPTION: This JavaScript snippet demonstrates the fundamental way to initialize the Deepgram client. It shows both ES module `import` and CommonJS `require` syntax for obtaining `createClient`, then uses it with a `DEEPGRAM_API_KEY` to create a Deepgram instance.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_5
+
+LANGUAGE: javascript
+CODE:
+```
+import { createClient } from "@deepgram/sdk";
+// - or -
+// const { createClient } = require("@deepgram/sdk");
+
+const deepgram = createClient(DEEPGRAM_API_KEY);
+```
+
+----------------------------------------
+
+TITLE: Initializing Deepgram Client and Configuring Live Connection (JavaScript)
+DESCRIPTION: This snippet initializes the Deepgram client with an API key and configures a live transcription connection. It specifies the 'nova-2' model, 'en-US' language, enables smart formatting, interim results, utterance end detection, VAD events, and sets an endpointing timeout for silence detection. This code block also includes the start of the asynchronous IIFE that wraps the entire transcription logic.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/examples/browser-live/index.html#_snippet_0
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { createClient } = deepgram;
+const _deepgram = createClient("deepgram-api-key");
+console.log("Deepgram Instance: ", _deepgram);
+
+(async () => {
+  const url = "http://stream.live.vc.bbcmedia.co.uk/bbc_world_service";
+  // We will collect the is_final=true messages here so we can use them when the person finishes speaking
+  let is_finals = [];
+  const connection = _deepgram.listen.live({
+    model: "nova-2",
+    language: "en-US",
+    // Apply smart formatting to the output
+    smart_format: true,
+    // To get UtteranceEnd, the following must be set:
+    interim_results: true,
+    utterance_end_ms: 1000,
+    vad_events: true,
+    // Time in milliseconds of silence to wait for before finalizing speech
+    endpointing: 300,
+  });
+```
+
+----------------------------------------
+
+TITLE: Handling Deepgram Live Transcription Events (JavaScript)
+DESCRIPTION: This section defines event listeners for the Deepgram live connection, depending on the 'connection' object and 'is_finals' array from the previous snippet. It processes 'Results' to distinguish between interim, final, and speech final transcripts, concatenating final segments. It also handles 'UtteranceEnd' for complete utterances, and logs 'open', 'close', 'Metadata', 'SpeechStarted', and 'error' events.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/examples/browser-live/index.html#_snippet_1
+
+LANGUAGE: JavaScript
+CODE:
+```
+  connection.on("open", () => {
+    connection.on("close", () => {
+      console.log("Connection closed.");
+    });
+    connection.on("Metadata", (data) => {
+      console.log(`Deepgram Metadata: ${data}`);
+    });
+    connection.on("Results", (data) => {
+      const sentence = data.channel.alternatives[0].transcript;
+      // Ignore empty transcripts
+      if (sentence.length == 0) {
+        return;
+      }
+      if (data.is_final) {
+        // We need to collect these and concatenate them together when we get a speech_final=true
+        // See docs: https://developers.deepgram.com/docs/understand-endpointing-interim-results
+        is_finals.push(sentence);
+        // Speech final means we have detected sufficent silence to consider this end of speech
+        // Speech final is the lowest latency result as it triggers as soon an the endpointing value has triggered
+        if (data.speech_final) {
+          const utterance = is_finals.join(" ");
+          console.log(`Speech Final: ${utterance}`);
+          is_finals = [];
+        } else {
+          // These are useful if you need real time captioning and update what the Interim Results produced
+          console.log(`Is Final: ${sentence}`);
+        }
+      } else {
+        // These are useful if you need real time captioning of what is being spoken
+        console.log(`Interim Results: ${sentence}`);
+      }
+    });
+    connection.on("UtteranceEnd", (data) => {
+      const utterance = is_finals.join(" ");
+      console.log(`Deepgram UtteranceEnd: ${utterance}`);
+      is_finals = [];
+    });
+    connection.on("SpeechStarted", (data) => {
+      // console.log("Deepgram SpeechStarted");
+    });
+    connection.on("error", (err) => {
+      console.error(err);
+    });
+```
+
+----------------------------------------
+
+TITLE: Configuring and Managing a Deepgram Voice Agent Connection (JavaScript)
+DESCRIPTION: This snippet demonstrates how to establish and configure a real-time voice agent connection using the Deepgram SDK. It shows how to set up event handlers for connection status, agent speech, conversation text, and audio data, as well as how to send audio input and maintain the connection. Requires a Deepgram API key and an audio playback implementation.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_20
+
+LANGUAGE: JavaScript
+CODE:
+```
+import { createClient } from "@deepgram/sdk";
+import { AgentEvents } from "@deepgram/sdk";
+
+const deepgram = createClient(DEEPGRAM_API_KEY);
+
+// Create an agent connection
+const agent = deepgram.agent();
+
+// Set up event handlers
+agent.on(AgentEvents.Open, () => {
+  console.log("Connection opened");
+
+  // Configure the agent once connection is established
+  agent.configure({
+    audio: {
+      input: {
+        encoding: "linear16",
+        sampleRate: 16000,
+      },
+      output: {
+        encoding: "linear16",
+        container: "wav",
+        sampleRate: 24000,
+      },
+    },
+    agent: {
+      listen: {
+        model: "nova-3",
+      },
+      speak: {
+        model: "aura-2-thalia-en",
+      },
+      think: {
+        provider: {
+          type: "anthropic",
+        },
+        model: "claude-3-haiku-20240307",
+        instructions: "You are a helpful AI assistant. Keep responses brief and friendly.",
+      },
+    },
+  });
+});
+
+// Handle agent responses
+agent.on(AgentEvents.AgentStartedSpeaking, (data) => {
+  console.log("Agent started speaking:", data["total_latency"]);
+});
+
+agent.on(AgentEvents.ConversationText, (message) => {
+  console.log(`${message.role} said: ${message.content}`);
+});
+
+agent.on(AgentEvents.Audio, (audio) => {
+  // Handle audio data from the agent
+  playAudio(audio); // Your audio playback implementation
+});
+
+agent.on(AgentEvents.Error, (error) => {
+  console.error("Error:", error);
+});
+
+agent.on(AgentEvents.Close, () => {
+  console.log("Connection closed");
+});
+
+// Send audio data
+function sendAudioData(audioData) {
+  agent.send(audioData);
+}
+
+// Keep the connection alive
+setInterval(() => {
+  agent.keepAlive();
+}, 8000);
+```
+
+----------------------------------------
+
+TITLE: Live Streaming Audio Transcription (JavaScript)
+DESCRIPTION: This snippet sets up a live streaming connection to Deepgram for real-time audio transcription. It initializes a live connection, listens for the 'Open' event, and then streams audio data from a source to Deepgram, logging the transcription results as they arrive.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_18
+
+LANGUAGE: JavaScript
+CODE:
+```
+const dgConnection = deepgram.listen.live({ model: "nova" });
+
+dgConnection.on(LiveTranscriptionEvents.Open, () => {
+  dgConnection.on(LiveTranscriptionEvents.Transcript, (data) => {
+    console.log(data);
+  });
+
+  source.addListener("got-some-audio", async (event) => {
+    dgConnection.send(event.raw_audio_data);
+  });
+});
+```
+
+----------------------------------------
+
+TITLE: Streaming Audio from URL to Deepgram Live Connection (JavaScript)
+DESCRIPTION: This snippet demonstrates how to fetch an audio stream from a specified URL and continuously send its chunks to the established Deepgram live transcription connection. It uses a recursive `read()` function to process the stream until it's complete, handling potential fetch or stream read errors. This code block also includes the closing of the asynchronous IIFE.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/examples/browser-live/index.html#_snippet_2
+
+LANGUAGE: JavaScript
+CODE:
+```
+  fetch(url)
+    .then((response) => response.body)
+    .then((body) => {
+      const reader = body.getReader();
+      function read() {
+        reader
+          .read()
+          .then(({ done, value }) => {
+            if (done) {
+              console.log("Stream complete");
+              return;
+            }
+            connection.send(value);
+            read();
+          })
+          .catch((error) => {
+            console.error("Stream read error:", error);
+          });
+      }
+      read();
+    })
+    .catch((error) => {
+      console.error("Fetch error:", error);
+    });
+})();
+```
+
+----------------------------------------
+
+TITLE: Performing Text-to-Speech Synthesis via WebSocket (JavaScript)
+DESCRIPTION: This snippet demonstrates real-time text-to-speech synthesis using a WebSocket connection. It establishes a live connection, sends text for synthesis, and flushes the buffer, handling connection open and close events. Requires the `deepgram` client and `LiveTTSEvents`.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_22
+
+LANGUAGE: JavaScript
+CODE:
+```
+const dgConnection = deepgram.speak.live({ model: "aura-2-thalia-en" });
+
+dgConnection.on(LiveTTSEvents.Open, () => {
+  console.log("Connection opened");
+
+  // Send text data for TTS synthesis
+  dgConnection.sendText(text);
+
+  // Send Flush message to the server after sending the text
+  dgConnection.flush();
+
+  dgConnection.on(LiveTTSEvents.Close, () => {
+    console.log("Connection closed");
+  });
+});
+```
+
+----------------------------------------
+
+TITLE: Transcribing Audio from URL using Deepgram JavaScript SDK
+DESCRIPTION: This asynchronous function demonstrates how to transcribe audio from a public URL using the `transcribeUrl` method of the Deepgram client. It specifies the 'nova' model for transcription and includes error handling and result logging.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/examples/browser-prerecorded/index.html#_snippet_1
+
+LANGUAGE: JavaScript
+CODE:
+```
+const transcribeUrl = async () => {
+  const { result, error } = await _deepgram.listen.prerecorded.transcribeUrl(
+    { url: "https://dpgr.am/spacewalk.wav", },
+    { model: "nova", }
+  );
+  if (error) console.error(error, result);
+  if (!error) console.dir(result, { depth: null });
+};
+```
+
+----------------------------------------
+
+TITLE: Executing Deepgram Transcription Functions in JavaScript
+DESCRIPTION: This snippet demonstrates the execution of the previously defined `transcribeUrl` and `transcribeFile` asynchronous functions, initiating the audio transcription processes.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/examples/browser-prerecorded/index.html#_snippet_3
+
+LANGUAGE: JavaScript
+CODE:
+```
+transcribeUrl(); transcribeFile();
+```
+
+----------------------------------------
+
+TITLE: Importing Deepgram SDK via ESM Module
+DESCRIPTION: This HTML snippet illustrates how to import the Deepgram SDK using an ESM module from the jsDelivr CDN. By using <script type="module">, it allows for standard ES module `import` syntax to obtain the `createClient` function and initialize the Deepgram client.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_4
+
+LANGUAGE: javascript
+CODE:
+```
+import { createClient } from "https://cdn.jsdelivr.net/npm/@deepgram/sdk/+esm";
+const deepgram = createClient("deepgram-api-key");
+
+console.log("Deepgram Instance: ", deepgram);
+// ...
+```
+
+----------------------------------------
+
+TITLE: Generating Captions (WebVTT) from Transcription Result (JavaScript)
+DESCRIPTION: This snippet demonstrates how to generate captions in WebVTT format from a Deepgram transcription result. It first transcribes a remote audio file synchronously, then uses the `@deepgram/captions` library to convert the `result` object into a WebVTT string.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_19
+
+LANGUAGE: JavaScript
+CODE:
+```
+import { webvtt /* , srt */ } from "@deepgram/captions";
+
+const { result, error } = await deepgram.listen.prerecorded.transcribeUrl(
+  {
+    url: "https://dpgr.am/spacewalk.wav",
+  },
+  {
+    model: "nova",
+  }
+);
+
+const vttOutput = webvtt(result);
+// const srtOutput = srt(result);
+```
+
+----------------------------------------
+
+TITLE: Transcribing Audio from File using Deepgram JavaScript SDK
+DESCRIPTION: This asynchronous function shows how to transcribe a local audio file using the `transcribeFile` method. It reads the file content using `fs.readFileSync` and sends it for transcription with the 'nova' model, including error handling and result logging.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/examples/browser-prerecorded/index.html#_snippet_2
+
+LANGUAGE: JavaScript
+CODE:
+```
+const transcribeFile = async () => {
+  const { result, error } = await _deepgram.listen.prerecorded.transcribeFile(
+    fs.readFileSync("./examples/nasa.mp4"),
+    { model: "nova", }
+  );
+  if (error) console.error(error, result);
+  if (!error) console.dir(result, { depth: null });
+};
+```
+
+----------------------------------------
+
+TITLE: Performing Text-to-Speech Synthesis via REST API (JavaScript)
+DESCRIPTION: This snippet shows how to synthesize text into speech using Deepgram's REST API. It sends a text input and specifies the desired voice model to receive the synthesized audio result. Requires the `deepgram` client to be initialized.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_21
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { result } = await deepgram.speak.request({ text }, { model: "aura-2-thalia-en" });
+```
+
+----------------------------------------
+
+TITLE: Analyzing Text with Deepgram Text Intelligence (JavaScript)
+DESCRIPTION: This snippet illustrates how to use Deepgram's Text Intelligence API to analyze a given text. It sends the text along with parameters to request topic extraction and sentiment analysis, returning the results or any errors. Requires the `deepgram` client.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_23
+
+LANGUAGE: JavaScript
+CODE:
+```
+const text = `The history of the phrase 'The quick brown fox jumps over the
+lazy dog'. The earliest known appearance of the phrase was in The Boston
+Journal. In an article titled "Current Notes" in the February 9, 1885, edition,
+the phrase is mentioned as a good practice sentence for writing students: "A
+favorite copy set by writing teachers for their pupils is the following,
+because it contains every letter of the alphabet: 'A quick brown fox jumps over
+the lazy dog.'" Dozens of other newspapers published the phrase over the
+next few months, all using the version of the sentence starting with "A" rather
+than "The". The earliest known use of the phrase starting with "The" is from
+the 1888 book Illustrative Shorthand by Linda Bronson.[3] The modern form
+(starting with "The") became more common even though it is slightly longer than
+the original (starting with "A").`;
+
+const { result, error } = await deepgram.read.analyzeText(
+  { text },
+  { language: "en", topics: true, sentiment: true }
+);
+```
+
+----------------------------------------
+
+TITLE: Asynchronous Transcription of Remote Audio File with Callback (JavaScript)
+DESCRIPTION: This snippet illustrates how to initiate an asynchronous pre-recorded transcription for a remote audio file, with results delivered to a specified callback URL. It uses `transcribeUrlCallback` along with a `CallbackUrl` object to define the endpoint where Deepgram will send the transcription results.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_15
+
+LANGUAGE: JavaScript
+CODE:
+```
+import { CallbackUrl } from "@deepgram/sdk";
+
+const { result, error } = await deepgram.listen.prerecorded.transcribeUrlCallback(
+  {
+    url: "https://dpgr.am/spacewalk.wav",
+  },
+  new CallbackUrl("http://callback/endpoint"),
+  {
+    model: "nova",
+  }
+);
+```
+
+----------------------------------------
+
+TITLE: Synchronous Transcription of Remote Audio File (JavaScript)
+DESCRIPTION: This snippet demonstrates how to perform synchronous pre-recorded transcription of an audio file hosted at a remote URL using the Deepgram SDK. It uses `transcribeUrl` to send the audio URL and specifies the desired transcription model, returning the result or an error.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_12
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { result, error } = await deepgram.listen.prerecorded.transcribeUrl(
+  {
+    url: "https://dpgr.am/spacewalk.wav",
+  },
+  {
+    model: "nova",
+  }
+);
+```
+
+----------------------------------------
+
+TITLE: Retrieving All Available Models (Deepgram JavaScript SDK)
+DESCRIPTION: This snippet illustrates how to retrieve all models available for a specified Deepgram project using the `getAllModels` method. It requires a `projectId` and an empty options object, returning the models in `result` or an `error`.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_47
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { result, error } = await deepgram.manage.getAllModels(projectId, {});
+```
+
+----------------------------------------
+
+TITLE: Asynchronous Transcription of Local Audio File via Buffer with Callback (JavaScript)
+DESCRIPTION: This snippet demonstrates how to perform asynchronous pre-recorded transcription of a local audio file by reading its content into a buffer, with results sent to a callback URL. It uses `transcribeFileCallback` with `fs.readFileSync` and a `CallbackUrl` object to specify the callback endpoint.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_17
+
+LANGUAGE: JavaScript
+CODE:
+```
+import { CallbackUrl } from "@deepgram/sdk";
+
+const { result, error } = await deepgram.listen.prerecorded.transcribeFileCallback(
+  fs.readFileSync("./examples/spacewalk.wav"),
+  new CallbackUrl("http://callback/endpoint"),
+  {
+    model: "nova",
+  }
+);
+```
+
+----------------------------------------
+
+TITLE: Creating Deepgram Project Key (JavaScript)
+DESCRIPTION: This snippet creates a new API key for a Deepgram project, assigning it the specified scopes. It returns the newly created key's details in 'result' or an 'error' if creation fails.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_31
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { result, error } = await deepgram.manage.createProjectKey(projectId, options);
+```
+
+----------------------------------------
+
+TITLE: Deleting Deepgram Project Key (JavaScript)
+DESCRIPTION: This snippet deletes a specific API key from a Deepgram project using both the project ID and the key ID. It returns an 'error' object if the deletion is unsuccessful.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_32
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { error } = await deepgram.manage.deleteProjectKey(projectId, projectKeyId);
+```
+
+----------------------------------------
+
+TITLE: Asynchronous Transcription of Local Audio File via Stream with Callback (JavaScript)
+DESCRIPTION: This example shows how to perform asynchronous pre-recorded transcription of a local audio file by streaming its content, with results sent to a callback URL. It uses `transcribeFileCallback` with `fs.createReadStream` and a `CallbackUrl` object to specify the callback endpoint.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_16
+
+LANGUAGE: JavaScript
+CODE:
+```
+import { CallbackUrl } from "@deepgram/sdk";
+
+const { result, error } = await deepgram.listen.prerecorded.transcribeFileCallback(
+  fs.createReadStream("./examples/spacewalk.wav"),
+  new CallbackUrl("http://callback/endpoint"),
+  {
+    model: "nova",
+  }
+);
+```
+
+----------------------------------------
+
+TITLE: Synchronous Transcription of Local Audio File via Buffer (JavaScript)
+DESCRIPTION: This snippet demonstrates how to transcribe a local audio file synchronously by reading its entire content into a buffer using `fs.readFileSync`. The `transcribeFile` method then processes this buffer with the specified transcription model, returning the transcription result or an error.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_14
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { result, error } = await deepgram.listen.prerecorded.transcribeFile(
+  fs.readFileSync("./examples/spacewalk.wav"),
+  {
+    model: "nova",
+  }
+);
+```
+
+----------------------------------------
+
+TITLE: Listing Deepgram Project Keys (JavaScript)
+DESCRIPTION: This snippet retrieves all API keys associated with a given Deepgram project ID. It returns a list of keys in the 'result' object or an 'error' if the operation fails.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_29
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { result, error } = await deepgram.manage.getProjectKeys(projectId);
+```
+
+----------------------------------------
+
+TITLE: Retrieving Specific Deepgram Project Key (JavaScript)
+DESCRIPTION: This snippet fetches a specific API key for a Deepgram project using both the project ID and the key ID. It returns the key details in 'result' or an 'error' if not found or on failure.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_30
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { result, error } = await deepgram.manage.getProjectKey(projectId, projectKeyId);
+```
+
+----------------------------------------
+
+TITLE: Synchronous Transcription of Local Audio File via Stream (JavaScript)
+DESCRIPTION: This example shows how to transcribe a local audio file synchronously by streaming its content using `fs.createReadStream`. The `transcribeFile` method processes the audio stream and applies the specified transcription model, returning the transcription result or an error.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_13
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { result, error } = await deepgram.listen.prerecorded.transcribeFile(
+  fs.createReadStream("./examples/spacewalk.wav"),
+  {
+    model: "nova",
+  }
+);
+```
+
+----------------------------------------
+
+TITLE: Summarizing Deepgram Project Usage (JavaScript)
+DESCRIPTION: This snippet retrieves a summary of usage data for a Deepgram project, based on specified filtering options. It returns the summarized usage in 'result' or an 'error' if the operation fails.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_43
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { result, error } = await deepgram.manage.getProjectUsageSummary(projectId, options);
+```
+
+----------------------------------------
+
+TITLE: Initializing Deepgram Client with UMD Global Variable
+DESCRIPTION: This JavaScript snippet, embedded within an HTML <script> tag, demonstrates how to initialize the Deepgram client after importing the SDK via UMD. It accesses `createClient` from the global `deepgram` variable and creates an instance using an API key.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_3
+
+LANGUAGE: javascript
+CODE:
+```
+const { createClient } = deepgram;
+const _deepgram = createClient("deepgram-api-key");
+
+console.log("Deepgram Instance: ", _deepgram);
+// ...
+```
+
+----------------------------------------
+
+TITLE: Setting Custom Fetch Headers in Deepgram SDK (JavaScript)
+DESCRIPTION: This example shows how to configure the Deepgram JavaScript SDK to include custom HTTP headers with fetch requests. This is useful for adding specific metadata or authentication headers beyond the standard API key. The headers are set within the global fetch options.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_11
+
+LANGUAGE: JavaScript
+CODE:
+```
+import { createClient } from "@deepgram/sdk";
+
+const deepgram = createClient("proxy", {
+  global: { fetch: { options: { headers: { "x-custom-header": "foo" } } } },
+});
+```
+
+----------------------------------------
+
+TITLE: Importing Deepgram SDK via UMD (unpkg)
+DESCRIPTION: This HTML snippet shows an alternative way to import the Deepgram SDK using a UMD build from the unpkg CDN. Similar to jsDelivr, it enables direct browser usage with a plain <script> tag, exposing the `deepgram` global variable.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_2
+
+LANGUAGE: html
+CODE:
+```
+<script src="https://unpkg.com/@deepgram/sdk"></script>
+```
+
+----------------------------------------
+
+TITLE: Importing Deepgram SDK via UMD (jsdelivr)
+DESCRIPTION: This HTML snippet demonstrates how to import the Deepgram SDK using a UMD build from the jsDelivr CDN. This method allows the SDK to be used directly in a browser environment via a plain <script> tag, making the `deepgram` global variable available.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_1
+
+LANGUAGE: html
+CODE:
+```
+<script src="https://cdn.jsdelivr.net/npm/@deepgram/sdk"></script>
+```
+
+----------------------------------------
+
+TITLE: Retrieving Deepgram Project Usage Fields (JavaScript)
+DESCRIPTION: This snippet lists the features, models, tags, languages, and processing methods used for requests within a specified Deepgram project. It returns this information in 'result' or an 'error'.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_44
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { result, error } = await deepgram.manage.getProjectUsageFields(projectId, options);
+```
+
+----------------------------------------
+
+TITLE: Listing All Deepgram Projects (JavaScript)
+DESCRIPTION: This snippet shows how to retrieve a list of all Deepgram projects accessible by the current API key. It returns an array of project objects with their respective details. Requires the `deepgram` client.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_25
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { result, error } = await deepgram.manage.getProjects();
+```
+
+----------------------------------------
+
+TITLE: Configuring Listen API URL for Deepgram SDK
+DESCRIPTION: This JavaScript snippet demonstrates how to override the API URL specifically for the `/listen` endpoints of the Deepgram SDK. This is useful for on-premise installations or when routing transcription requests through a local proxy, ensuring only transcription-related calls use the specified URL.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_8
+
+LANGUAGE: javascript
+CODE:
+```
+import { createClient } from "@deepgram/sdk";
+// - or -
+// const { createClient } = require("@deepgram/sdk");
+
+const deepgram = createClient(DEEPGRAM_API_KEY, {
+  listen: { fetch: { options: { url: "http://localhost:8080" } } }
+});
+```
+
+----------------------------------------
+
+TITLE: Configuring Global WebSocket URL for Deepgram SDK
+DESCRIPTION: This JavaScript snippet shows how to modify the global WebSocket URL used by the Deepgram SDK, particularly for features like the Voice Agent. It sets the `websocket` options within the `global` namespace to a custom URL, enabling proxy usage or local testing.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_7
+
+LANGUAGE: javascript
+CODE:
+```
+import { createClient } from "@deepgram/sdk";
+// - or -
+// const { createClient } = require("@deepgram/sdk");
+
+const deepgram = createClient(DEEPGRAM_API_KEY, {
+  global: { websocket: { options: { url: "ws://localhost:8080" } } }
+});
+```
+
+----------------------------------------
+
+TITLE: Configuring Global API URL for Deepgram SDK
+DESCRIPTION: This JavaScript snippet demonstrates how to change the default API URL for all Deepgram SDK methods. It configures the `global` namespace's `fetch` options to point to a different URL, useful for testing against beta environments or custom endpoints.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_6
+
+LANGUAGE: javascript
+CODE:
+```
+import { createClient } from "@deepgram/sdk";
+// - or -
+// const { createClient } = require("@deepgram/sdk");
+
+const deepgram = createClient(DEEPGRAM_API_KEY, {
+  global: { fetch: { options: { url: "https://api.beta.deepgram.com" } } }
+});
+```
+
+----------------------------------------
+
+TITLE: Overriding Global Fetch Client in Deepgram SDK
+DESCRIPTION: This JavaScript snippet illustrates how to provide a custom `fetch` client for the Deepgram SDK. By setting the `client` property within the `global.fetch` options, developers can integrate their own HTTP client logic, allowing for advanced request handling or mocking.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_9
+
+LANGUAGE: javascript
+CODE:
+```
+import { createClient } from "@deepgram/sdk";
+// - or -
+// const { createClient } = require("@deepgram/sdk");
+
+const yourFetch = async () => {
+  return Response("...etc");
+};
+
+const deepgram = createClient(DEEPGRAM_API_KEY, {
+  global: { fetch: { client: yourFetch } }
+});
+```
+
+----------------------------------------
+
+TITLE: Configuring Deepgram SDK for Proxy Requests in Browser (JavaScript)
+DESCRIPTION: This snippet demonstrates how to configure the Deepgram JavaScript SDK to route REST-based requests through a proxy server when used in a browser environment. It requires passing 'proxy' as the API key and setting the proxy URL in the global fetch options. The proxy service must handle the Authorization header.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_10
+
+LANGUAGE: JavaScript
+CODE:
+```
+import { createClient } from "@deepgram/sdk";
+
+const deepgram = createClient("proxy", {
+  global: { fetch: { options: { proxy: { url: "http://localhost:8080" } } } },
+});
+```
+
+----------------------------------------
+
+TITLE: Retrieving a Specific Deepgram Project by ID (JavaScript)
+DESCRIPTION: This snippet demonstrates how to fetch details for a specific Deepgram project using its unique `projectId`. It returns the project object if found, or an error otherwise. Requires the `deepgram` client and a valid `projectId`.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_26
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { result, error } = await deepgram.manage.getProject(projectId);
+```
+
+----------------------------------------
+
+TITLE: Retrieving All Project Balances (Deepgram JavaScript SDK)
+DESCRIPTION: This snippet demonstrates how to retrieve a list of all balance information for a specified Deepgram project using the `getProjectBalances` method. It requires a `projectId` as a parameter and returns a `result` object containing the balances or an `error`.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_45
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { result, error } = await deepgram.manage.getProjectBalances(projectId);
+```
+
+----------------------------------------
+
+TITLE: Retrieving Deepgram API Token Details (JavaScript)
+DESCRIPTION: This snippet demonstrates how to fetch the details of the currently used Deepgram API authentication token. It provides information about the token's properties and permissions. Requires the `deepgram` client.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_24
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { result, error } = await deepgram.manage.getTokenDetails();
+```
+
+----------------------------------------
+
+TITLE: Deleting Deepgram Project (JavaScript)
+DESCRIPTION: This snippet shows how to delete a specific Deepgram project by its ID. It returns an error object if the deletion fails, otherwise it indicates success implicitly.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_28
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { error } = await deepgram.manage.deleteProject(projectId);
+```
+
+----------------------------------------
+
+TITLE: Updating Deepgram Project (JavaScript)
+DESCRIPTION: This snippet demonstrates how to update an existing Deepgram project using its ID and a set of options. It returns the result of the update operation or an error if the update fails.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_27
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { result, error } = await deepgram.manage.updateProject(projectId, options);
+```
+
+----------------------------------------
+
+TITLE: Retrieving a Specific Model (Deepgram JavaScript SDK)
+DESCRIPTION: This snippet demonstrates how to fetch details of a specific model by its `modelId` within a given `projectId` using the `getModel` method. It returns the model details in the `result` object or an `error`.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_48
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { result, error } = await deepgram.manage.getModel(projectId, modelId);
+```
+
+----------------------------------------
+
+TITLE: Retrieving a Specific Project Balance (Deepgram JavaScript SDK)
+DESCRIPTION: This snippet shows how to fetch detailed balance information for a specific `balanceId` within a given `projectId` using the `getProjectBalance` method. It returns the balance details in the `result` object or an `error`.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_46
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { result, error } = await deepgram.manage.getProjectBalance(projectId, balanceId);
+```
+
+----------------------------------------
+
+TITLE: Retrieving Deepgram Project Members (JavaScript)
+DESCRIPTION: This snippet retrieves all member account objects associated with a specified Deepgram project ID. It returns a list of members in 'result' or an 'error' if the operation fails.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_33
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { result, error } = await deepgram.manage.getProjectMembers(projectId);
+```
+
+----------------------------------------
+
+TITLE: Creating On-Premise Credentials (Deepgram JavaScript SDK)
+DESCRIPTION: This snippet illustrates how to create new On-Premise credentials for a specified `projectId` using the `createCredentials` method. It requires an `options` object containing the credential configuration and returns the new credential details in `result` or an `error`.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_51
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { result, error } = await deepgram.onprem.createCredentials(projectId, options);
+```
+
+----------------------------------------
+
+TITLE: Retrieving Specific On-Premise Credentials (Deepgram JavaScript SDK)
+DESCRIPTION: This snippet demonstrates how to retrieve details for a specific On-Premise credential by its `credentialId` within a given `projectId` using the `getCredentials` method. It returns the credential details in `result` or an `error`.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_50
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { result, error } = await deepgram.onprem.getCredentials(projectId, credentialId);
+```
+
+----------------------------------------
+
+TITLE: Listing Deepgram Project Invitations (JavaScript)
+DESCRIPTION: This snippet retrieves all pending invitations associated with a specified Deepgram project ID. It returns a list of invitations in 'result' or an 'error' if the operation fails.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_37
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { result, error } = await deepgram.manage.getProjectInvites(projectId);
+```
+
+----------------------------------------
+
+TITLE: Updating Deepgram Project Member Scope (JavaScript)
+DESCRIPTION: This snippet updates the scopes for a specific member within a Deepgram project. It requires the project ID, member ID, and new scope options, returning the updated scopes in 'result' or an 'error'.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_36
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { result, error } = await deepgram.manage.updateProjectMemberScope(
+  projectId,
+  projectMemberId,
+  options
+);
+```
+
+----------------------------------------
+
+TITLE: Removing Deepgram Project Member (JavaScript)
+DESCRIPTION: This snippet removes a specific member account from a Deepgram project using the project ID and the member ID. It returns an 'error' object if the removal is unsuccessful.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_34
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { error } = await deepgram.manage.removeProjectMember(projectId, projectMemberId);
+```
+
+----------------------------------------
+
+TITLE: Retrieving Deepgram Project Member Scopes (JavaScript)
+DESCRIPTION: This snippet retrieves the scopes assigned to a specific member within a Deepgram project. It requires both the project ID and the member ID, returning the scopes in 'result' or an 'error'.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_35
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { result, error } = await deepgram.manage.getProjectMemberScopes(projectId, projectMemberId);
+```
+
+----------------------------------------
+
+TITLE: Listing On-Premise Credentials (Deepgram JavaScript SDK)
+DESCRIPTION: This snippet shows how to list all On-Premise credentials associated with a specific `projectId` using the `listCredentials` method from the `deepgram.onprem` module. It returns the list of credentials in `result` or an `error`.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_49
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { result, error } = await deepgram.onprem.listCredentials(projectId);
+```
+
+----------------------------------------
+
+TITLE: Retrieving All Deepgram Project Usage Requests (JavaScript)
+DESCRIPTION: This snippet retrieves all usage requests associated with a Deepgram project, filtered by provided options. It returns a list of requests in 'result' or an 'error' if the operation fails.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_41
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { result, error } = await deepgram.manage.getProjectUsageRequests(projectId, options);
+```
+
+----------------------------------------
+
+TITLE: Deleting On-Premise Credentials (Deepgram JavaScript SDK)
+DESCRIPTION: This snippet shows how to delete a specific On-Premise credential by its `credentialId` within a given `projectId` using the `deleteCredentials` method. It indicates success or failure via the `result` or `error` object.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_52
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { result, error } = await deepgram.onprem.deleteCredentials(projectId, credentialId);
+```
+
+----------------------------------------
+
+TITLE: Deleting Deepgram Project Invitation (JavaScript)
+DESCRIPTION: This snippet removes a specific invitation from a Deepgram project using the project ID and the invitee's email address. It returns an 'error' object if the deletion is unsuccessful.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_39
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { error } = await deepgram.manage.deleteProjectInvite(projectId, email);
+```
+
+----------------------------------------
+
+TITLE: Sending Deepgram Project Invitation (JavaScript)
+DESCRIPTION: This snippet sends an invitation to a new member to join a Deepgram project, specifying the project ID and invitation options (e.g., email address). It returns the invitation details in 'result' or an 'error'.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_38
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { result, error } = await deepgram.manage.sendProjectInvite(projectId, options);
+```
+
+----------------------------------------
+
+TITLE: Leaving Deepgram Project (JavaScript)
+DESCRIPTION: This snippet allows the authenticated user to remove themselves from a specified Deepgram project. It returns the result of the action or an 'error' if the operation fails.
+SOURCE: https://github.com/deepgram/deepgram-js-sdk/blob/main/README.md#_snippet_40
+
+LANGUAGE: JavaScript
+CODE:
+```
+const { result, error } = await deepgram.manage.leaveProject(projectId);
+```

@@ -1,0 +1,70 @@
+Part 0: The Development & Deployment Lifecycle
+This new preliminary part describes how features are built and reliably deployed before a user ever interacts with them.
+
+Step 0: Building and Deploying a Feature
+Development: A developer writes code for a new feature, like adding threaded replies to the transcript.
+Testing (Jest & Cypress):
+Using Jest, the developer writes unit tests for the backend logic (e.g., "Does the reply-saving function correctly interact with Drizzle ORM?").
+Using Cypress, they write end-to-end tests that simulate the entire user flow in a browser (e.g., "Log in with a test Clerk user, open a saved transcript, post a reply, and verify it appears on the screen").
+Continuous Integration (GitHub Actions): The developer pushes the code to GitHub. This automatically triggers a GitHub Actions workflow that runs all Jest and Cypress tests.
+Continuous Deployment (GitHub Actions): If all tests pass, the workflow automatically deploys the new, validated code to your production environment (e.g., Vercel for the frontend, a service like Render or AWS for the backend). The feature is now live.
+Part 1: The Setup - Creating the Classroom
+This part is about creating the persistent "room" before any live streaming happens.
+
+Step 1: Teacher Authentication
+
+Frontend (Next.js & Clerk): The teacher visits your application. They are met with Clerk's <SignIn /> component.
+Authentication (Clerk): The teacher signs in using Google, their email, or another method you've configured. Clerk handles the entire authentication flow securely and, upon success, sets a session token (JWT) in the user's browser. Clerk's middleware now recognizes the teacher as an authenticated user.
+Result: The teacher is logged in. Your application now has access to their unique userId from Clerk (e.g., user_123abc...).
+Step 2: Teacher Creates the Classroom
+
+Frontend (Next.js): The teacher clicks a "Create Classroom" button. A form appears asking for a name, like "AP World History - Period 3".
+API Call: Upon submission, the frontend makes a POST request to your backend API endpoint, for example, /api/classrooms. Crucially, this request includes the Clerk JWT in its Authorization header.
+Backend (Express.js & Clerk): Your Express server receives the request. A middleware uses Clerk's Node.js SDK to verify the JWT. This confirms the request is from a valid, logged-in user and gives you their userId. This is a critical security check.
+Backend (Drizzle ORM & Neon): Now authenticated, the server logic proceeds. It generates a unique, shareable invite code for the classroom. It uses Drizzle ORM to create a new record in your Neon (PostgreSQL) classrooms table. The Drizzle code would look something like this:
+TypeScript
+
+await db.insert(classrooms).values({
+  name: "AP World History - Period 3",
+  teacherId: clerkUserId, // The ID from Clerk
+  inviteCode: "XYZ-789" // The generated code
+});
+API Response: The backend responds with the newly created classroom data. The frontend can now display a success message and the shareable inviteCode for students.
+Part 2: The Main Event - The Live Lesson
+This is the real-time core of your application.
+
+Step 3: Teacher Starts the Lesson & Transcription
+
+Frontend (Next.js): The teacher navigates to the newly created classroom page and clicks "Start Lesson".
+Producer Service (Backend & Deepgram): The frontend starts capturing microphone audio and streams it to your backend "Producer Service". This service, in turn, pipes the audio to the Deepgram STT API.
+Data Ingestion & Assembly (Producer, Redis, & Confluent): As Deepgram streams back transcribed words/phrases in real-time, the Producer Service performs two actions in parallel for each batch of words:
+Live Stream: It produces a message containing the batch of words to a Confluent (Kafka) topic for immediate real-time delivery.
+Robust Assembly: It pushes the same batch of words into a list in Redis against a unique session ID. This provides a reliable, crash-proof temporary storage for the full transcript as it's being built.
+Step 4: Students View the Live Captions
+
+Frontend (Next.js & Socket.IO): A student joins the classroom using the invite code. Their client application establishes a Socket.IO connection to your backend's "Consumer Service".
+Consumer Service (Backend & Confluent): This service is completely separate from the Producer. Its only job is to be a consumer for the Confluent (Kafka) topics. It's constantly listening for new messages on the transcripts-classroom-ID topic.
+Real-time Delivery (Consumer & Socket.IO): When the Consumer Service receives a new message from Confluent, it immediately uses Socket.IO to emit that batch of words to the specific Socket.IO "room" for that classroom. The student's browser renders the words, creating the live caption effect.
+Part 3: The Finale - Saving the Transcript
+This is the final action to persist the lesson's content.
+
+Step 5: Teacher Finishes and Saves the Transcript
+Frontend (Next.js): The teacher clicks "End Lesson". The audio stream stops. A prompt appears: "Save this lesson's transcript?" The teacher clicks "Save".
+API Call: The frontend makes a POST request to a backend endpoint like /api/transcripts, including the classroom ID. Again, this request is authenticated with the Clerk JWT.
+Backend (Express.js, Redis, S3, Drizzle, Neon):
+The API authenticates the request with Clerk to ensure this user is the teacher.
+It retrieves the complete, ordered list of transcript chunks from Redis, not from fragile server memory.
+It assembles the data into a final, structured JSON object.
+Using the AWS S3 SDK, it uploads this single JSON file to your S3 bucket, ensuring the ContentType is set to application/json.
+Upon successful upload, it uses Drizzle ORM to write the metadata of the transcript (including the S3 file key) to your Neon (PostgreSQL) transcripts table.
+TypeScript
+
+await db.insert(transcripts).values({
+  classroomId: a_classroom_id,
+  teacherId: clerkUserId,
+  s3FileKey: "transcripts/SESSION_ID.json", // Note the .json extension
+  duration: 3600, // Lesson duration in seconds
+  createdAt: new Date()
+});
+Finally, it can delete the temporary transcript data from Redis.
+Result: The live transcript is now securely and efficiently stored as a structured JSON file in S3, with a reference to it in your primary Neon database. The teacher can now access this rich data for review, editing, or summarization.

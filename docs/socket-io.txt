@@ -1,0 +1,3919 @@
+TITLE: Using Socket.IO Cluster Engine with Node.js Cluster and Redis
+DESCRIPTION: This Node.js example combines Node.js clustering with Redis pub/sub for communication. The primary process sets up the cluster and the Redis clients, using `setupPrimaryWithRedis`. Workers then use the `NodeClusterEngine`, which leverages the Redis setup for inter-process communication.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io-cluster-engine/README.md#_snippet_3
+
+LANGUAGE: JavaScript
+CODE:
+```
+import cluster from "node:cluster";
+import process from "node:process";
+import { availableParallelism } from "node:os";
+import { createClient } from "redis";
+import { setupPrimaryWithRedis, NodeClusterEngine } from "@socket.io/cluster-engine";
+import { createServer } from "node:http";
+import { Server } from "socket.io";
+
+if (cluster.isPrimary) {
+  console.log(`Primary ${process.pid} is running`);
+
+  const numCPUs = availableParallelism();
+
+  // fork workers
+  for (let i = 0; i < numCPUs; i++) {
+    cluster.fork();
+  }
+
+  const pubClient = createClient();
+  const subClient = pubClient.duplicate();
+
+  await Promise.all([
+    pubClient.connect(),
+    subClient.connect(),
+  ]);
+
+  // setup connection between and within the clusters
+  setupPrimaryWithRedis(pubClient, subClient);
+
+  // needed for packets containing Buffer objects (you can ignore it if you only send plaintext objects)
+  cluster.setupPrimary({
+    serialization: "advanced",
+  });
+
+  cluster.on("exit", (worker, code, signal) => {
+    console.log(`worker ${worker.process.pid} died`);
+  });
+} else {
+  const httpServer = createServer((req, res) => {
+    res.writeHead(404).end();
+  });
+
+  const engine = new NodeClusterEngine();
+
+  engine.attach(httpServer, {
+    path: "/socket.io/"
+  });
+
+  const io = new Server();
+
+  io.bind(engine);
+
+  // workers will share the same port
+  httpServer.listen(3000);
+
+  console.log(`Worker ${process.pid} started`);
+}
+```
+
+----------------------------------------
+
+TITLE: Installing Socket.IO (Bash)
+DESCRIPTION: These commands demonstrate how to install the Socket.IO library using the npm or yarn package managers. Installation is required to use Socket.IO in a Node.js project.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io/Readme.md#_snippet_1
+
+LANGUAGE: bash
+CODE:
+```
+// with npm
+npm install socket.io
+
+// with yarn
+yarn add socket.io
+```
+
+----------------------------------------
+
+TITLE: Server Authenticating Handshake with Passport JWT (JavaScript)
+DESCRIPTION: Server-side Socket.IO middleware that intercepts incoming engine requests. It checks if the request is the initial handshake and, if so, applies Passport-JWT authentication to validate the JWT provided by the client. Subsequent requests bypass this authentication step.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/passport-jwt-example/README.md#_snippet_2
+
+LANGUAGE: JavaScript
+CODE:
+```
+io.engine.use((req, res, next) => {
+  const isHandshake = req._query.sid === undefined;
+  if (isHandshake) {
+    passport.authenticate("jwt", { session: false })(req, res, next);
+  } else {
+    next();
+  }
+});
+```
+
+----------------------------------------
+
+TITLE: Handling Socket.IO Events (JavaScript)
+DESCRIPTION: This snippet shows the basic structure for handling connections and events on the Socket.IO server. It demonstrates listening for new client connections, emitting events to a specific socket or broadcasting to all connected sockets, and listening for specific events sent from a client.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io/Readme.md#_snippet_0
+
+LANGUAGE: javascript
+CODE:
+```
+io.on('connection', socket => {
+  socket.emit('request', /* … */); // emit an event to the socket
+  io.emit('broadcast', /* … */); // emit an event to all connected sockets
+  socket.on('reply', () => { /* … */ }); // listen to the event
+});
+```
+
+----------------------------------------
+
+TITLE: Importing Socket.IO Client via CDN ESM Bundle in HTML
+DESCRIPTION: This HTML snippet shows how to import the Socket.IO client library directly in a web browser using an ESM bundle provided via a Content Delivery Network (CDN). It then demonstrates connecting to the default socket endpoint and emitting a 'hello' event.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io-client/CHANGELOG.md#_snippet_12
+
+LANGUAGE: HTML
+CODE:
+```
+<script type="module">
+  import { io } from "https://cdn.socket.io/4.3.0/socket.io.esm.min.js";
+
+  const socket = io();
+
+  socket.emit("hello", "world");
+</script>
+```
+
+----------------------------------------
+
+TITLE: Implementing Acknowledgements - Socket.IO JavaScript
+DESCRIPTION: This example illustrates how to implement packet acknowledgements in Socket.IO. On one side, a message is sent with a callback function that executes upon receiving the acknowledgement. On the other side, the event handler receives the message payload and a callback function to send the acknowledgement back.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/socket.io-protocol/v4.md#_snippet_1
+
+LANGUAGE: javascript
+CODE:
+```
+// on one side
+socket.emit("hello", 1, () => { console.log("received"); });
+// on the other side
+socket.on("hello", (a, cb) => { cb(); });
+```
+
+----------------------------------------
+
+TITLE: Configuring CORS with cors option (Node.js)
+DESCRIPTION: Demonstrates the new method (4.0.0-alpha.0 and later) for configuring CORS using the dedicated cors option object in the Engine.IO server. It shows setting origin, methods, allowed headers, and credentials via structured options, replacing the handlePreflightRequest function.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io/CHANGELOG.md#_snippet_7
+
+LANGUAGE: javascript
+CODE:
+```
+new Server({
+  cors: {
+    origin: "https://example.com",
+    methods: ["GET"],
+    allowedHeaders: ["Authorization"],
+    credentials: true
+  }
+})
+```
+
+----------------------------------------
+
+TITLE: Integrating Socket.IO with Express (JavaScript)
+DESCRIPTION: This snippet illustrates how to integrate Socket.IO with an Express application. It emphasizes creating a standard HTTP server using `http.createServer()` with the Express app as the request handler and then attaching Socket.IO to this HTTP server.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io/Readme.md#_snippet_5
+
+LANGUAGE: javascript
+CODE:
+```
+const app = require('express')();
+const server = require('http').createServer(app);
+const io = require('socket.io')(server);
+io.on('connection', () => { /* … */ });
+server.listen(3000);
+```
+
+----------------------------------------
+
+TITLE: Declaring Socket.IO Namespace (Server JS)
+DESCRIPTION: Demonstrates how to declare a custom namespace on the server side using the Socket.IO Node.js API. It shows how to define the namespace object and attach a connection handler to listen for client connections to that specific namespace.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/socket.io-protocol/v5-current.md#_snippet_0
+
+LANGUAGE: js
+CODE:
+```
+// declare the namespace
+const namespace = io.of("/admin");
+// handle the connection to the namespace
+namespace.on("connection", (socket) => {
+  // ...
+});
+```
+
+----------------------------------------
+
+TITLE: Client Connecting with JWT Headers (JavaScript)
+DESCRIPTION: Client-side JavaScript code showing how to initialize a Socket.IO connection and include a JWT in the HTTP headers using the `extraHeaders` option during instantiation. This token will be used for authentication on the server.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/passport-jwt-example/README.md#_snippet_1
+
+LANGUAGE: JavaScript
+CODE:
+```
+const socket = io({
+  extraHeaders: {
+    authorization: `bearer token`
+  }
+});
+```
+
+----------------------------------------
+
+TITLE: Configuring Retry Mechanism for Socket.IO Client JS
+DESCRIPTION: This snippet demonstrates how to configure the packet retry mechanism using the `retries` and `ackTimeout` options during client initialization. It shows how to set the maximum number of retries and the default timeout for waiting for an acknowledgement, followed by examples of event emissions with implicit, explicit, and custom timeout acknowledgements.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io-client/CHANGELOG.md#_snippet_8
+
+LANGUAGE: js
+CODE:
+```
+const socket = io({
+  retries: 3,
+  ackTimeout: 10000
+});
+```
+
+LANGUAGE: js
+CODE:
+```
+// implicit ack
+socket.emit("my-event");
+```
+
+LANGUAGE: js
+CODE:
+```
+// explicit ack
+socket.emit("my-event", (err, val) => { /* ... */ });
+```
+
+LANGUAGE: js
+CODE:
+```
+// custom timeout (in that case the ackTimeout is optional)
+socket.timeout(5000).emit("my-event", (err, val) => { /* ... */ });
+```
+
+----------------------------------------
+
+TITLE: Integrating Socket.IO with Koa (JavaScript)
+DESCRIPTION: This example shows how to integrate Socket.IO with a Koa application. It involves creating an HTTP server using the `http` module and passing the Koa application's `callback()` method to it, then attaching Socket.IO to this server.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io/Readme.md#_snippet_6
+
+LANGUAGE: javascript
+CODE:
+```
+const app = require('koa')();
+const server = require('http').createServer(app.callback());
+const io = require('socket.io')(server);
+io.on('connection', () => { /* … */ });
+server.listen(3000);
+```
+
+----------------------------------------
+
+TITLE: Using Socket Local Flag for Server-Local Emitting Socket.IO JS
+DESCRIPTION: Demonstrates the use of the socket.local flag in Socket.IO to emit events only to clients connected to the specific server instance where the emission is triggered, bypassing the adapter's broadcasting mechanism for other nodes in a multi-server setup.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io/CHANGELOG.md#_snippet_12
+
+LANGUAGE: js
+CODE:
+```
+socket.local.to('room101').emit(/* */);
+```
+
+----------------------------------------
+
+TITLE: Integrating Socket.IO with Node.js HTTP Server (JavaScript)
+DESCRIPTION: This example shows how to attach Socket.IO to a standard Node.js HTTP server. It requires creating an HTTP server instance first, then passing it to the Socket.IO constructor, and finally starting the HTTP server to listen on a port.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io/Readme.md#_snippet_2
+
+LANGUAGE: javascript
+CODE:
+```
+const server = require('http').createServer();
+const io = require('socket.io')(server);
+io.on('connection', client => {
+  client.on('event', data => { /* … */ });
+  client.on('disconnect', () => { /* … */ });
+});
+server.listen(3000);
+```
+
+----------------------------------------
+
+TITLE: Using Promise-based Acknowledgements with Socket.IO
+DESCRIPTION: Illustrates the use of `emitWithAck()` and `serverSideEmitWithAck()` methods, which provide a Promise-based approach for handling acknowledgements from clients or other servers. Includes examples for emitting with and without timeouts, and how to catch errors if acknowledgements are not received within the specified delay.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io/CHANGELOG.md#_snippet_1
+
+LANGUAGE: javascript
+CODE:
+```
+try {
+  const responses = await io.timeout(1000).emitWithAck("some-event");
+  console.log(responses); // one response per client
+} catch (e) {
+  // some clients did not acknowledge the event in the given delay
+}
+
+io.on("connection", async (socket) => {
+    // without timeout
+  const response = await socket.emitWithAck("hello", "world");
+
+  // with a specific timeout
+  try {
+    const response = await socket.timeout(1000).emitWithAck("hello", "world");
+  } catch (err) {
+    // the client did not acknowledge the event in the given delay
+  }
+});
+```
+
+LANGUAGE: javascript
+CODE:
+```
+try {
+  const responses = await io.timeout(1000).serverSideEmitWithAck("some-event");
+  console.log(responses); // one response per server (except itself)
+} catch (e) {
+  // some servers did not acknowledge the event in the given delay
+}
+```
+
+----------------------------------------
+
+TITLE: Implementing Socket.IO Packet Acknowledgement - JavaScript
+DESCRIPTION: Illustrates how to send an event with an acknowledgement callback on one side and how the receiving side invokes the callback to send the acknowledgement back. This enables confirmation that a packet was received and processed.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/socket.io-protocol/v3.md#_snippet_1
+
+LANGUAGE: javascript
+CODE:
+```
+// on one side
+socket.emit("hello", 1, () => { console.log("received"); });
+// on the other side
+socket.on("hello", (a, cb) => { cb(); });
+```
+
+----------------------------------------
+
+TITLE: Using Promise-Based Acknowledgements Socket.IO Client JS
+DESCRIPTION: This snippet illustrates the new promise-based syntax for handling event acknowledgements, providing a more modern asynchronous pattern. It shows how to emit an event and `await` the server's acknowledgement, demonstrating usage both without a timeout and with a specific timeout value using the `.timeout()` method and including error handling for timeout failures.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io-client/CHANGELOG.md#_snippet_6
+
+LANGUAGE: js
+CODE:
+```
+// without timeout
+const response = await socket.emitWithAck("hello", "world");
+```
+
+LANGUAGE: js
+CODE:
+```
+// with a specific timeout
+try {
+  const response = await socket.timeout(1000).emitWithAck("hello", "world");
+} catch (err) {
+  // the server did not acknowledge the event in the given delay
+}
+```
+
+----------------------------------------
+
+TITLE: Using Socket.IO with ES Modules (JavaScript)
+DESCRIPTION: This example shows how to import and instantiate the Socket.IO Server class using modern ES module syntax (`import`). It then attaches the server to an existing HTTP server instance.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io/Readme.md#_snippet_4
+
+LANGUAGE: javascript
+CODE:
+```
+import { Server } from "socket.io";
+const io = new Server(server);
+io.listen(3000);
+```
+
+----------------------------------------
+
+TITLE: Connecting to Socket.IO Namespaces (Client JS)
+DESCRIPTION: Illustrates how a Socket.IO client connects to the main namespace ('/') and a custom namespace ('/admin'). It shows that multiple namespaces can share the same underlying WebSocket connection and how to attach a 'connect' event handler to a specific namespace connection.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/socket.io-protocol/v5-current.md#_snippet_1
+
+LANGUAGE: js
+CODE:
+```
+// reach the main namespace
+const socket1 = io();
+// reach the "/admin" namespace (with the same underlying WebSocket connection)
+const socket2 = io("/admin");
+// handle the connection to the namespace
+socket2.on("connect", () => {
+  // ...
+});
+```
+
+----------------------------------------
+
+TITLE: Defining and Connecting to Socket.IO Namespaces - JavaScript
+DESCRIPTION: Demonstrates defining a custom namespace ('/admin') on the server side and handling new connections within that namespace. Also shows how a client connects to both the default namespace and a specific namespace.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/socket.io-protocol/v3.md#_snippet_0
+
+LANGUAGE: javascript
+CODE:
+```
+// server-side
+const nsp = io.of("/admin");
+nsp.on("connect", socket => {});
+
+// client-side
+const socket1 = io(); // default namespace
+const socket2 = io("/admin");
+socket2.on("connect", () => {});
+```
+
+----------------------------------------
+
+TITLE: Enabling Connection State Recovery in Socket.IO
+DESCRIPTION: Shows how to enable the connection state recovery feature on the Socket.IO server. This feature allows clients to restore their state (id, rooms, data, missed packets) after a temporary disconnection by configuring the `connectionStateRecovery` option with parameters like maximum disconnection duration.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io/CHANGELOG.md#_snippet_2
+
+LANGUAGE: javascript
+CODE:
+```
+import { Server } from "socket.io";
+
+const io = new Server({
+  connectionStateRecovery: {
+    // default values
+    maxDisconnectionDuration: 2 * 60 * 1000,
+    skipMiddlewares: true,
+  },
+});
+
+io.on("connection", (socket) => {
+  console.log(socket.recovered); // whether the state was recovered or not
+});
+```
+
+----------------------------------------
+
+TITLE: Handling Disconnect Event with Reason and Description
+DESCRIPTION: Shows how to access additional details about a socket disconnection by listening to the `disconnect` event. The event handler receives the `reason` for disconnection and a `description`, providing more context than previous versions.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io/CHANGELOG.md#_snippet_4
+
+LANGUAGE: javascript
+CODE:
+```
+io.on("connection", (socket) => {
+  socket.on("disconnect", (reason, description) => {
+    console.log(description);
+  });
+});
+```
+
+----------------------------------------
+
+TITLE: Configuring Server CORS and Request Validation Socket.IO JS
+DESCRIPTION: Shows how to configure Cross-Origin Resource Sharing (CORS) and validate incoming requests in Socket.IO v3 after the removal of the origins option. It provides examples using the standard cors option and the allowRequest function for custom logic.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io/CHANGELOG.md#_snippet_10
+
+LANGUAGE: js
+CODE:
+```
+new Server(3000, {
+  origins: ["https://example.com"]
+});
+```
+
+LANGUAGE: js
+CODE:
+```
+new Server(3000, {
+  cors: {
+    origin: "https://example.com",
+    methods: ["GET", "POST"],
+    allowedHeaders: ["content-type"]
+  }
+});
+```
+
+LANGUAGE: js
+CODE:
+```
+new Server(3000, {
+  allowRequest: (req, callback) => {
+    callback(null, req.headers.referer.startsWith("https://example.com"));
+  }
+});
+```
+
+----------------------------------------
+
+TITLE: Enabling Socket.IO Debug Logging (Bash)
+DESCRIPTION: This command shows how to enable detailed debug output for all Socket.IO components by setting the `DEBUG` environment variable to `socket.io*` before running your Node.js application. This is helpful for diagnosing connection issues and understanding library behavior.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io/Readme.md#_snippet_8
+
+LANGUAGE: bash
+CODE:
+```
+DEBUG=socket.io* node myapp
+```
+
+----------------------------------------
+
+TITLE: Handling Connect Errors Socket.IO JavaScript Client
+DESCRIPTION: Shows the change in event name for connection errors in Socket.IO client version 3.0.0. The event name was changed from "error" to "connect_error" to distinguish it from general error events. This snippet demonstrates the correct way to listen for connection errors in the new version.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io-client/CHANGELOG.md#_snippet_13
+
+LANGUAGE: javascript
+CODE:
+```
+// before
+socket.on("error", () => {});
+
+// after
+socket.on("connect_error", () => {});
+```
+
+----------------------------------------
+
+TITLE: Using Namespaces - Socket.IO JavaScript
+DESCRIPTION: This snippet demonstrates how to work with custom namespaces in Socket.IO. It shows the server-side code to create a namespace using `io.of('/admin')` and listen for connections, and the client-side code to connect to the default namespace and the specific '/admin' namespace.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/socket.io-protocol/v4.md#_snippet_0
+
+LANGUAGE: javascript
+CODE:
+```
+// server-side
+const nsp = io.of("/admin");
+nsp.on("connect", socket => {});
+
+// client-side
+const socket1 = io(); // default namespace
+const socket2 = io("/admin");
+socket2.on("connect", () => {});
+```
+
+----------------------------------------
+
+TITLE: Running Socket.IO Server Standalone (JavaScript)
+DESCRIPTION: This snippet demonstrates creating and running a Socket.IO server instance directly, allowing it to listen on a specified port without explicitly creating a separate HTTP server instance beforehand.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io/Readme.md#_snippet_3
+
+LANGUAGE: javascript
+CODE:
+```
+const io = require('socket.io')();
+io.on('connection', client => { ... });
+io.listen(3000);
+```
+
+----------------------------------------
+
+TITLE: Integrating Express-like Middlewares at Engine.IO Level
+DESCRIPTION: Demonstrates how to use the `io.engine.use()` method to integrate standard Express-compatible middlewares (like `express-session` or `helmet`) into the Engine.IO layer. These middlewares are executed during the HTTP request/response cycle, unlike Socket.IO middlewares which are for namespace authorization.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io/CHANGELOG.md#_snippet_3
+
+LANGUAGE: javascript
+CODE:
+```
+io.engine.use((req, res, next) => {
+  // do something
+
+  next();
+});
+```
+
+LANGUAGE: javascript
+CODE:
+```
+import session from "express-session";
+
+io.engine.use(session({
+  secret: "keyboard cat",
+  resave: false,
+  saveUninitialized: true,
+  cookie: { secure: true }
+}));
+```
+
+LANGUAGE: javascript
+CODE:
+```
+import helmet from "helmet";
+
+io.engine.use(helmet());
+```
+
+----------------------------------------
+
+TITLE: Listening for Manager Events Socket.IO JavaScript Client
+DESCRIPTION: Demonstrates how to listen for Manager-level events (like "reconnect") after a breaking change in Socket.IO client version 3.0.0. Previously, these events were forwarded directly to the Socket instance, but now they must be accessed via the `socket.io` (Manager) instance.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io-client/CHANGELOG.md#_snippet_14
+
+LANGUAGE: javascript
+CODE:
+```
+socket.io.on("reconnect", () => {
+  // ...
+});
+```
+
+----------------------------------------
+
+TITLE: Including Socket.IO Client Script - HTML
+DESCRIPTION: This HTML snippet demonstrates how to include the Socket.IO client-side library in a web page. The script is typically served from the application server running Socket.IO, making the `io` object available globally for establishing connections.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io/README.md#_snippet_8
+
+LANGUAGE: html
+CODE:
+```
+<script src="/socket.io/socket.io.js">
+
+```
+
+----------------------------------------
+
+TITLE: Integrating Socket.IO with Fastify (JavaScript)
+DESCRIPTION: This snippet demonstrates integrating Socket.IO with a Fastify application using the `fastify-socket.io` plugin. After registering the plugin, the Socket.IO instance is accessible via the `app.io` decorator within the `ready()` promise.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io/Readme.md#_snippet_7
+
+LANGUAGE: javascript
+CODE:
+```
+const app = require('fastify')();
+app.register(require('fastify-socket.io'));
+app.ready().then(() => {
+    app.io.on('connection', () => { /* … */ });
+})
+app.listen(3000);
+```
+
+----------------------------------------
+
+TITLE: Using Socket.IO Cluster Engine with Redis Pub/Sub
+DESCRIPTION: This Node.js example demonstrates configuring Socket.IO with the RedisEngine. It involves setting up Redis clients for publishing and subscribing and then attaching the engine to an HTTP server and binding it to the Socket.IO server instance.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io-cluster-engine/README.md#_snippet_2
+
+LANGUAGE: JavaScript
+CODE:
+```
+import { createServer } from "node:http";
+import { createClient } from "redis";
+import { RedisEngine } from "@socket.io/cluster-engine";
+import { Server } from "socket.io";
+
+const httpServer = createServer((req, res) => {
+  res.writeHead(404).end();
+});
+
+const pubClient = createClient();
+const subClient = pubClient.duplicate();
+
+await Promise.all([
+  pubClient.connect(),
+  subClient.connect(),
+]);
+
+const engine = new RedisEngine(pubClient, subClient);
+
+engine.attach(httpServer, {
+  path: "/socket.io/"
+});
+
+const io = new Server();
+
+io.bind(engine);
+
+httpServer.listen(3000);
+```
+
+----------------------------------------
+
+TITLE: Broadcasting with Timeout and Acknowledgements Socket.IO JavaScript
+DESCRIPTION: This example shows how to use `io.timeout()` to broadcast an event to all connected sockets and wait for acknowledgements from each socket within the specified duration (1000ms). The callback receives an error object and an array of responses from the sockets.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io/CHANGELOG.md#_snippet_8
+
+LANGUAGE: javascript
+CODE:
+```
+io.timeout(1000).emit("some-event", (err, responses) => {
+  // ...
+});
+```
+
+----------------------------------------
+
+TITLE: Instantiating Engine.IO Server Node.js
+DESCRIPTION: These examples show various ways to create and attach an Engine.IO `Server` instance using the top-level `require('engine.io')` function. It covers creating first and then attaching, calling the module as a function, immediate attachment, and attachment with custom options. Requires an existing `http.Server` instance.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io/README.md#_snippet_4
+
+LANGUAGE: JavaScript
+CODE:
+```
+const httpServer; // previously created with `http.createServer();` from node.js api.
+
+// create a server first, and then attach
+const eioServer = require('engine.io').Server();
+eioServer.attach(httpServer);
+
+// or call the module as a function to get `Server`
+const eioServer = require('engine.io')();
+eioServer.attach(httpServer);
+
+// immediately attach
+const eioServer = require('engine.io')(httpServer);
+
+// with custom options
+const eioServer = require('engine.io')(httpServer, {
+  maxHttpBufferSize: 1e3
+});
+```
+
+----------------------------------------
+
+TITLE: Checking Connection Recovery Status Socket.IO Client JS
+DESCRIPTION: This code shows how to access the new `recovered` boolean attribute on the socket object within the `connect` event listener. This attribute indicates whether the client successfully recovered its session and received missed packets after a temporary disconnection, provided the feature is enabled on the server.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io-client/CHANGELOG.md#_snippet_7
+
+LANGUAGE: js
+CODE:
+```
+socket.on("connect", () => {
+  console.log(socket.recovered); // whether the recovery was successful
+});
+```
+
+----------------------------------------
+
+TITLE: Initializing Socket for Tree-shaking - JavaScript
+DESCRIPTION: This snippet shows how to use `SocketWithoutUpgrade` and specify a limited set of transports (`[WebSocket]`) to enable tree-shaking. This approach excludes the code for unused transports (like HTTP long-polling and WebTransport in this example) from the final bundle, reducing the client's size.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io-client/CHANGELOG.md#_snippet_1
+
+LANGUAGE: javascript
+CODE:
+```
+import { SocketWithoutUpgrade, WebSocket } from "engine.io-client";
+
+const socket = new SocketWithoutUpgrade({
+  transports: [WebSocket]
+});
+```
+
+----------------------------------------
+
+TITLE: Handling Socket.IO Disconnect Event with Details JS
+DESCRIPTION: This code shows how the `disconnect` event listener now provides `reason` and `details` parameters for enhanced debugging. It demonstrates accessing these parameters to understand the cause of disconnection, including transport errors and associated context like HTTP status codes.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io-client/CHANGELOG.md#_snippet_9
+
+LANGUAGE: js
+CODE:
+```
+socket.on("disconnect", (reason, details) => {
+  console.log(reason); // "transport error"
+
+  // in that case, details is an error object
+  console.log(details.message); "xhr post error"
+  console.log(details.description); // 413 (the HTTP status of the response)
+
+  // details.context refers to the XMLHttpRequest object
+  console.log(details.context.status); // 413
+  console.log(details.context.responseText); // ""
+});
+```
+
+----------------------------------------
+
+TITLE: Applying Middleware to Socket.IO Handshake (JavaScript)
+DESCRIPTION: Defines a helper function `onlyForHandshake` to conditionally apply standard Express middleware only during the Socket.IO connection handshake. It then uses this function to apply Passport session middleware and an authentication check to secure the connection engine.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/passport-example/README.md#_snippet_1
+
+LANGUAGE: JavaScript
+CODE:
+```
+function onlyForHandshake(middleware) {
+  return (req, res, next) => {
+    const isHandshake = req._query.sid === undefined;
+    if (isHandshake) {
+      middleware(req, res, next);
+    } else {
+      next();
+    }
+  };
+}
+
+io.engine.use(onlyForHandshake(sessionMiddleware));
+io.engine.use(onlyForHandshake(passport.session()));
+io.engine.use(
+  onlyForHandshake((req, res, next) => {
+    if (req.user) {
+      next();
+    } else {
+      res.writeHead(401);
+      res.end();
+    }
+  }),
+);
+```
+
+----------------------------------------
+
+TITLE: Handling Namespace Connections and Middleware Socket.IO JS
+DESCRIPTION: Explains the change in Socket.IO v3 regarding implicit connections to the default namespace. It shows that io.on('connection') and io.use() on the root server instance are no longer triggered for namespace connections, requiring middleware registration directly on the namespace instance.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io/CHANGELOG.md#_snippet_11
+
+LANGUAGE: js
+CODE:
+```
+// client-side
+const socket = io("/admin");
+
+// server-side
+io.on("connection", socket => {
+  // not triggered anymore
+})
+
+io.use((socket, next) => {
+  // not triggered anymore
+});
+```
+
+LANGUAGE: js
+CODE:
+```
+io.of("/admin").use((socket, next) => {
+  // triggered
+});
+```
+
+----------------------------------------
+
+TITLE: Setting Timeout for Event Acknowledgment in JavaScript
+DESCRIPTION: This JavaScript snippet demonstrates how to set a timeout for an event emission using the `socket.timeout()` method. If the server does not acknowledge the event within the specified delay (5000ms), the callback function will be invoked with an error.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io-client/CHANGELOG.md#_snippet_11
+
+LANGUAGE: JavaScript
+CODE:
+```
+socket.timeout(5000).emit("my-event", (err) => {
+  if (err) {
+    // the server did not acknowledge the event in the given delay
+  }
+});
+```
+
+----------------------------------------
+
+TITLE: Attaching Engine.IO Server with Options Node.js
+DESCRIPTION: This example shows how to attach an Engine.IO server to an existing `http.Server` instance using the `engine.attach` method with an options object. It demonstrates specifying a different WebSocket engine, like 'eiows', which requires installing it as a dependency. Requires 'engine.io', 'http', and the specified `wsEngine` dependency.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io/README.md#_snippet_6
+
+LANGUAGE: JavaScript
+CODE:
+```
+const engine = require('engine.io');
+const httpServer = require('http').createServer().listen(3000);
+const server = engine.attach(httpServer, {
+  wsEngine: require('eiows').Server // requires having eiows as dependency
+});
+
+server.on('connection', /* ... */);
+```
+
+----------------------------------------
+
+TITLE: Attaching Engine.IO Server to existing http.Server Node.js
+DESCRIPTION: This code illustrates how to attach an Engine.IO server to an existing Node.js `http.Server` instance that is already listening. It shows how to handle new connections and register listeners for 'message' and 'close' events on the connected socket. Requires 'engine.io' and the built-in 'http' module.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io/README.md#_snippet_1
+
+LANGUAGE: JavaScript
+CODE:
+```
+const engine = require('engine.io');
+const http = require('http').createServer().listen(3000);
+const server = engine.attach(http);
+
+server.on('connection', socket => {
+  socket.on('message', data => { });
+  socket.on('close', () => { });
+});
+```
+
+----------------------------------------
+
+TITLE: Listening Engine.IO Server with Options Node.js
+DESCRIPTION: This snippet demonstrates using the `engine.listen` method with an options object. It creates an HTTP server listening on port 3000 and attaches Engine.IO to it, configuring parameters like `pingTimeout` and `pingInterval`. Requires the 'engine.io' module.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io/README.md#_snippet_5
+
+LANGUAGE: JavaScript
+CODE:
+```
+const engine = require('engine.io');
+const server = engine.listen(3000, {
+  pingTimeout: 2000,
+  pingInterval: 10000
+});
+
+server.on('connection', /* ... */);
+```
+
+----------------------------------------
+
+TITLE: Using Socket.IO Cluster Engine with Node.js Cluster
+DESCRIPTION: This Node.js example demonstrates how to integrate the NodeClusterEngine with the built-in Node.js cluster module. It sets up a primary process to manage workers and inter-worker communication, while each worker runs a Socket.IO server instance attached to the cluster engine.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io-cluster-engine/README.md#_snippet_1
+
+LANGUAGE: JavaScript
+CODE:
+```
+import cluster from "node:cluster";
+import process from "node:process";
+import { availableParallelism } from "node:os";
+import { setupPrimary, NodeClusterEngine } from "@socket.io/cluster-engine";
+import { createServer } from "node:http";
+import { Server } from "socket.io";
+
+if (cluster.isPrimary) {
+  console.log(`Primary ${process.pid} is running`);
+
+  const numCPUs = availableParallelism();
+
+  // fork workers
+  for (let i = 0; i < numCPUs; i++) {
+    cluster.fork();
+  }
+
+  // setup connection within the cluster
+  setupPrimary();
+
+  // needed for packets containing Buffer objects (you can ignore it if you only send plaintext objects)
+  cluster.setupPrimary({
+    serialization: "advanced",
+  });
+
+  cluster.on("exit", (worker, code, signal) => {
+    console.log(`worker ${worker.process.pid} died`);
+  });
+} else {
+  const httpServer = createServer((req, res) => {
+    res.writeHead(404).end();
+  });
+
+  const engine = new NodeClusterEngine();
+
+  engine.attach(httpServer, {
+    path: "/socket.io/"
+  });
+
+  const io = new Server();
+
+  io.bind(engine);
+
+  // workers will share the same port
+  httpServer.listen(3000);
+
+  console.log(`Worker ${process.pid} started`);
+}
+```
+
+----------------------------------------
+
+TITLE: Configuring Custom Transports in Socket.IO Client (JavaScript)
+DESCRIPTION: Demonstrates how to explicitly specify the transport mechanisms the Socket.IO client should attempt to use. The `transports` option accepts an array of transport constructors imported from `engine.io-client`. This allows developers to prioritize or limit the transports based on the client or server environment.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io-client/CHANGELOG.md#_snippet_0
+
+LANGUAGE: javascript
+CODE:
+```
+import { io } from "socket.io-client";
+import { XHR, WebSocket } from "engine.io-client";
+
+const socket = io({
+  transports: [XHR, WebSocket]
+});
+```
+
+----------------------------------------
+
+TITLE: Providing WebTransport Polyfill for Node.js Socket.IO Client (JavaScript)
+DESCRIPTION: Shows how to make a WebTransport implementation available for the Socket.IO client in a Node.js environment. It involves importing a WebTransport polyfill package (`@fails-components/webtransport`) and assigning it to the global `WebTransport` property, allowing the client to utilize the WebTransport transport option if supported.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io-client/CHANGELOG.md#_snippet_2
+
+LANGUAGE: javascript
+CODE:
+```
+import { WebTransport } from "@fails-components/webtransport";
+
+global.WebTransport = WebTransport;
+```
+
+----------------------------------------
+
+TITLE: Enabling Debug Logging for Engine.IO Bash
+DESCRIPTION: This command enables verbose debugging output for all components within the Engine.IO library using the `debug` module. Set the `DEBUG` environment variable to `engine*` before running your Node.js application to see detailed logs related to Engine.IO operations.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io/README.md#_snippet_7
+
+LANGUAGE: bash
+CODE:
+```
+DEBUG=engine* node myapp
+```
+
+----------------------------------------
+
+TITLE: Handling Engine.IO Client Socket Close Event - JavaScript
+DESCRIPTION: This snippet shows how to handle the 'close' event emitted by an Engine.IO client socket. The event callback receives a `reason` string and a `details` object, which provides additional context for debugging transport errors, such as HTTP status codes or message descriptions.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io-client/CHANGELOG.md#_snippet_6
+
+LANGUAGE: javascript
+CODE:
+```
+socket.on("close", (reason, details) => {
+  console.log(reason); // "transport error"
+
+  // in that case, details is an error object
+  console.log(details.message); "xhr post error"
+  console.log(details.description); // 413 (the HTTP status of the response)
+
+  // details.context refers to the XMLHttpRequest object
+  console.log(details.context.status); // 413
+  console.log(details.context.responseText); // ""
+});
+```
+
+----------------------------------------
+
+TITLE: Connecting Engine.IO Client Browser JavaScript
+DESCRIPTION: This HTML script demonstrates connecting to an Engine.IO server from a browser using the client library (`engine.io.js`). It shows how to create a new `eio.Socket` instance and handle 'open', 'message', and 'close' events. The client library must be included via a `<script>` tag.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io/README.md#_snippet_3
+
+LANGUAGE: HTML
+CODE:
+```
+<script src="/path/to/engine.io.js"></script>
+<script>
+  const socket = new eio.Socket('ws://localhost/');
+  socket.on('open', () => {
+    socket.on('message', data => {});
+    socket.on('close', () => {});
+  });
+</script>
+```
+
+----------------------------------------
+
+TITLE: Initializing Socket with Custom Transports - JavaScript
+DESCRIPTION: This snippet demonstrates how to initialize an Engine.IO client `Socket` instance using a custom array of transport implementations. By providing an array like `[XHR, WebSocket]`, the client will only attempt to use these specified transports in order, overriding the default transport list. This requires importing the desired transport classes.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io-client/CHANGELOG.md#_snippet_0
+
+LANGUAGE: javascript
+CODE:
+```
+import { Socket, XHR, WebSocket } from "engine.io-client";
+
+const socket = new Socket({
+  transports: [XHR, WebSocket]
+});
+```
+
+----------------------------------------
+
+TITLE: Implementing Dynamic Namespaces Socket.IO JS
+DESCRIPTION: Illustrates how to create and connect to dynamic namespaces in Socket.IO using regular expressions on the server-side. This allows handling connections to multiple namespaces with similar naming patterns using a single listener.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io/CHANGELOG.md#_snippet_14
+
+LANGUAGE: js
+CODE:
+```
+io.of(/^\/dynamic-\d+$/).on('connect', (socket) => {
+  // socket.nsp.name = '/dynamic-101'
+});
+```
+
+LANGUAGE: js
+CODE:
+```
+const client = require('socket.io-client')('/dynamic-101');
+```
+
+----------------------------------------
+
+TITLE: Initializing Engine.IO Client in Node.js
+DESCRIPTION: This snippet demonstrates the basic usage of the Engine.IO client in a Node.js environment. It requires the module and creates a new Socket instance, setting up listeners for standard events like 'open', 'message', and 'close'.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io-client/README.md#_snippet_2
+
+LANGUAGE: javascript
+CODE:
+```
+const { Socket } = require('engine.io-client');
+const socket = new Socket('ws://localhost');
+socket.on('open', () => {
+  socket.on('message', (data) => {});
+  socket.on('close', () => {});
+});
+```
+
+----------------------------------------
+
+TITLE: Starting Docker Compose Stack - Shell
+DESCRIPTION: This command starts all services defined in the `docker-compose.yml` file in detached mode (`-d`). It is used to launch the Socket.IO chat application, including the HAProxy load balancer, Redis backend, and multiple Socket.IO nodes. Requires Docker Compose installation.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/cluster-haproxy/README.md#_snippet_0
+
+LANGUAGE: Shell
+CODE:
+```
+$ docker-compose up -d
+```
+
+----------------------------------------
+
+TITLE: Starting Socket.IO Chat Demo with Docker Compose (Shell)
+DESCRIPTION: This command starts the Socket.IO chat demo using Docker Compose. It builds, creates, and starts all services defined in the docker-compose.yml file in detached mode.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/cluster-traefik/README.md#_snippet_0
+
+LANGUAGE: shell
+CODE:
+```
+$ docker-compose up -d
+```
+
+----------------------------------------
+
+TITLE: Running the Express/Socket.IO Example (Shell)
+DESCRIPTION: These commands are used to set up and start the example application. The first command installs necessary Node.js dependencies listed in the package.json file. The second command starts the server, typically listening on port 3000.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/express-session-example/README.md#_snippet_0
+
+LANGUAGE: Shell
+CODE:
+```
+$ npm install
+$ npm start
+```
+
+----------------------------------------
+
+TITLE: Enabling Credentials for Node.js Socket.IO Client (JavaScript)
+DESCRIPTION: Configures the Socket.IO client running in Node.js to send credentials, specifically cookies, with HTTP requests used by transports like HTTP long-polling. Setting `withCredentials` to `true` is necessary for integrating the client with server setups relying on cookie-based sticky sessions for session persistence.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io-client/CHANGELOG.md#_snippet_3
+
+LANGUAGE: javascript
+CODE:
+```
+import { io } from "socket.io-client";
+
+const socket = io("https://example.com", {
+  withCredentials: true
+});
+```
+
+----------------------------------------
+
+TITLE: Enabling Try All Transports Option in Socket.IO Client (JavaScript)
+DESCRIPTION: Configures the Socket.IO client to automatically cycle through all configured transport options if the initial connection attempt fails. Setting `tryAllTransports` to `true` ensures resilience in environments where certain transports might be blocked or unavailable.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io-client/CHANGELOG.md#_snippet_1
+
+LANGUAGE: javascript
+CODE:
+```
+import { io } from "socket.io-client";
+
+const socket = io({
+  tryAllTransports: true
+});
+```
+
+----------------------------------------
+
+TITLE: Configuring Engine.IO Server in Node.js
+DESCRIPTION: This snippet shows how to initialize and configure an Engine.IO server using the `engine.io` library in Node.js. It sets standard protocol parameters like ping intervals, maximum payload size, and CORS options. The server is set up to listen on port 3000 and echoes any received data back to the client, serving as a basic test implementation.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/engine.io-protocol/v4-current.md#_snippet_5
+
+LANGUAGE: JavaScript
+CODE:
+```
+import { listen } from "engine.io";
+
+const server = listen(3000, {
+  pingInterval: 300,
+  pingTimeout: 200,
+  maxPayload: 1e6,
+  cors: {
+    origin: "*"
+  }
+});
+
+server.on("connection", socket => {
+  socket.on("data", (...args) => {
+    socket.send(...args);
+  });
+});
+```
+
+----------------------------------------
+
+TITLE: Integrating Express Middlewares with Engine.IO Node.js
+DESCRIPTION: This snippet illustrates how to integrate standard Express-style middlewares directly with the Engine.IO server instance using the `engine.use()` method. This allows processing incoming HTTP requests (including upgrade requests) with common middlewares like session management or security headers before they are handled by Engine.IO. The middleware function signature is `(req, res, next)`, where `next()` must be called to proceed to the next middleware or the Engine.IO handler. Examples show using a custom middleware, `express-session`, and `helmet`. Requires the respective middleware packages like `express-session` or `helmet` to be installed.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io/CHANGELOG.md#_snippet_1
+
+LANGUAGE: javascript
+CODE:
+```
+engine.use((req, res, next) => {
+  // do something
+
+  next();
+});
+
+// with express-session
+import session from "express-session";
+
+engine.use(session({
+  secret: "keyboard cat",
+  resave: false,
+  saveUninitialized: true,
+  cookie: { secure: true }
+}));
+
+// with helmet
+import helmet from "helmet";
+
+engine.use(helmet());
+```
+
+----------------------------------------
+
+TITLE: Disabling Binary Detection Socket.IO JavaScript Client
+DESCRIPTION: Shows how to use the `socket.binary(false)` flag introduced in Socket.IO client version 2.1.0. This flag allows skipping the recursive scan for binary data within the emitted object, which can improve performance when sending non-binary data.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io-client/CHANGELOG.md#_snippet_15
+
+LANGUAGE: javascript
+CODE:
+```
+// by default, the object is recursively scanned to check whether it contains some binary data
+// in the following example, the check is skipped in order to improve performance
+socket.binary(false).emit('plain-object', object);
+```
+
+----------------------------------------
+
+TITLE: Starting Socket.IO TODO Project - Shell
+DESCRIPTION: Executes the necessary shell commands to launch the Socket.IO TODO application. This involves starting required services via Docker Compose, installing project dependencies using npm, and finally initiating the application process.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/basic-crud-application/server-postgres-cluster/README.md#_snippet_0
+
+LANGUAGE: Shell
+CODE:
+```
+$ docker-compose up -d
+$ npm install
+$ npm start
+```
+
+----------------------------------------
+
+TITLE: Disabling Trailing Slash for Socket.IO Path
+DESCRIPTION: Demonstrates how to use the `addTrailingSlash` option to disable the default behavior of adding a trailing slash to the Socket.IO path (`/socket.io/`). Setting this option to `false` allows clients to connect using `/socket.io`.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io/CHANGELOG.md#_snippet_6
+
+LANGUAGE: javascript
+CODE:
+```
+import { createServer } from "node:http";
+import { Server } from "socket.io";
+
+const httpServer = createServer();
+const io = new Server(httpServer, {
+  addTrailingSlash: false
+});
+```
+
+----------------------------------------
+
+TITLE: Configuring Socket to Try All Transports - JavaScript
+DESCRIPTION: This snippet illustrates how to enable the `tryAllTransports` option when initializing the `Socket`. Setting this option to `true` causes the client to automatically test other available transports if the initial connection attempt with the first transport in the list fails, providing fallback capability.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io-client/CHANGELOG.md#_snippet_2
+
+LANGUAGE: javascript
+CODE:
+```
+import { Socket } from "engine.io-client";
+
+const socket = new Socket({
+  tryAllTransports: true
+});
+```
+
+----------------------------------------
+
+TITLE: Socket.IO CONNECT Packet with Auth Data - JSON
+DESCRIPTION: Demonstrates including authentication or other query parameters within the namespace string when sending a CONNECT packet to a specific namespace. This allows passing initial data during the namespace connection handshake.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/socket.io-protocol/v3.md#_snippet_3
+
+LANGUAGE: json
+CODE:
+```
+{
+  "type": 0,
+  "nsp": "/admin?token=1234&uid=abcd"
+}
+```
+
+----------------------------------------
+
+TITLE: Configuring Basic Engine.IO Node.js Server
+DESCRIPTION: This Node.js code snippet demonstrates how to create a basic Engine.IO server instance, configure options like ping intervals, timeouts, version compatibility (allowEIO3), max payload size, and CORS. It sets up an event listener to echo received 'data' packets back to the client.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/engine.io-protocol/v3.md#_snippet_6
+
+LANGUAGE: javascript
+CODE:
+```
+import { listen } from "engine.io";
+
+const server = listen(3000, {
+  pingInterval: 300,
+  pingTimeout: 200,
+  allowEIO3: true,
+  maxPayload: 1e6,
+  cors: {
+    origin: "*"
+  }
+});
+
+server.on("connection", socket => {
+  socket.on("data", (...args) => {
+    socket.send(...args);
+  });
+});
+```
+
+----------------------------------------
+
+TITLE: Enabling Automatic Cleanup of Empty Child Namespaces
+DESCRIPTION: Illustrates how to enable the `cleanupEmptyChildNamespaces` option on the Socket.IO server. When set to `true`, this option automatically removes dynamic namespaces and closes their adapters if the last socket connected to them disconnects.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io/CHANGELOG.md#_snippet_5
+
+LANGUAGE: javascript
+CODE:
+```
+import { createServer } from "node:http";
+import { Server } from "socket.io";
+
+const httpServer = createServer();
+const io = new Server(httpServer, {
+  cleanupEmptyChildNamespaces: true
+});
+```
+
+----------------------------------------
+
+TITLE: Handling Engine.IO Requests Manually Node.js
+DESCRIPTION: This snippet demonstrates the most granular way to integrate Engine.IO by manually handling 'upgrade' and 'request' events from an HTTP server instance. It creates a new `engine.Server` and then uses its `handleUpgrade` and `handleRequest` methods. Requires 'engine.io' and an existing `http.Server` instance (`httpServer`).
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io/README.md#_snippet_2
+
+LANGUAGE: JavaScript
+CODE:
+```
+const engine = require('engine.io');
+const server = new engine.Server();
+
+server.on('connection', socket => {
+  socket.send('hi');
+});
+
+// …
+httpServer.on('upgrade', (req, socket, head) => {
+  server.handleUpgrade(req, socket, head);
+});
+
+httpServer.on('request', (req, res) => {
+  server.handleRequest(req, res);
+});
+```
+
+----------------------------------------
+
+TITLE: Running React Native App on Android (Bash)
+DESCRIPTION: These commands build and run the React Native application on a connected Android device or emulator. Ensure the Metro bundler is already running in a separate terminal and you have an Android environment set up.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/ReactNativeExample/README.md#_snippet_1
+
+LANGUAGE: bash
+CODE:
+```
+# using npm
+npm run android
+```
+
+LANGUAGE: bash
+CODE:
+```
+# OR using Yarn
+yarn android
+```
+
+----------------------------------------
+
+TITLE: Connecting Engine.IO Client in Node.js with Extra Headers
+DESCRIPTION: This snippet demonstrates how to include custom headers in the Engine.IO connection request when running in Node.js. It sets the 'extraHeaders' option in the configuration object passed to the Socket constructor, useful for authentication or custom metadata.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io-client/README.md#_snippet_4
+
+LANGUAGE: javascript
+CODE:
+```
+const opts = {
+  extraHeaders: {
+    'X-Custom-Header-For-My-Project': 'my-secret-access-token',
+    'Cookie': 'user_session=NI2JlCKF90aE0sJZD9ZzujtdsUqNYSBYxzlTsvdSUe35ZzdtVRGqYFr0kdGxbfc5gUOkR9RGp20GVKza; path=/; expires=Tue, 07-Apr-2015 18:18:08 GMT; secure; HttpOnly'
+  }
+};
+
+const { Socket } = require('engine.io-client');
+const socket = new Socket('ws://localhost', opts);
+socket.on('open', () => {
+  socket.on('message', (data) => {});
+  socket.on('close', () => {});
+});
+```
+
+----------------------------------------
+
+TITLE: Enabling Debug Logging JavaScript
+DESCRIPTION: This snippet is used in a web browser's developer console to enable verbose debug logging for the socket.io-client library. It sets a specific key in the browser's localStorage, which the library reads to determine the desired logging scope ('*' means all debug output). Reloading the page is required after executing this command.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io-client/README.md#_snippet_0
+
+LANGUAGE: JavaScript
+CODE:
+```
+localStorage.debug = '*';
+```
+
+----------------------------------------
+
+TITLE: Handling Incoming Messages Engine.IO/JS
+DESCRIPTION: Registers a callback function to handle incoming 'message' packets from the Engine.IO server. This is a common pattern for receiving application-level data sent over the connection. The callback receives the message data as an argument.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/engine.io-protocol/v3.md#_snippet_0
+
+LANGUAGE: JavaScript
+CODE:
+```
+socket.on('message', function (data) { console.log(data); });
+```
+
+----------------------------------------
+
+TITLE: Implementing Custom Adapter with Socket.IO Cluster Adapter JavaScript
+DESCRIPTION: This snippet shows how to implement a custom Socket.IO adapter for a cluster environment by extending the `ClusterAdapterWithHeartbeat` class. It demonstrates connecting to a pub/sub mechanism in the constructor and implementing the `doPublish` and `doPublishResponse` methods to handle message distribution between nodes.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io-adapter/CHANGELOG.md#_snippet_0
+
+LANGUAGE: javascript
+CODE:
+```
+class MyAdapter extends ClusterAdapterWithHeartbeat {
+  constructor(nsp, pubSub, opts) {
+    super(nsp, opts);
+    this.pubSub = pubSub;
+    pubSub.subscribe("main-channel", (message) => this.onMessage(message));
+    pubSub.subscribe("specific-channel#" + this.uid, (response) => this.onResponse(response));
+  }
+
+  doPublish(message) {
+    return this.pubSub.publish("main-channel", message);
+  }
+
+  doPublishResponse(requesterUid, response) {
+    return this.pubSub.publish("specific-channel#" + requesterUid, response);
+  }
+}
+```
+
+----------------------------------------
+
+TITLE: Starting Angular Development Server (Shell)
+DESCRIPTION: Run this command to start the local development server for the Angular application. It serves the app at http://localhost:4200/ and includes features like automatic reloading on file changes.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/basic-crud-application/angular-client/README.md#_snippet_0
+
+LANGUAGE: Shell
+CODE:
+```
+ng serve
+```
+
+----------------------------------------
+
+TITLE: Configuring Socket.IO Server for Testing - JavaScript
+DESCRIPTION: This JavaScript code snippet provides a reference configuration for a Node.js Socket.IO server intended to pass the official test suite. It sets various options like `pingInterval`, `pingTimeout`, `maxPayload`, `connectTimeout`, and `cors`. It also includes basic connection handlers for the default namespace and a custom '/custom' namespace, demonstrating event emission, listening, and acknowledgment handling.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/socket.io-protocol/v5-current.md#_snippet_3
+
+LANGUAGE: javascript
+CODE:
+```
+import { Server } from "socket.io";
+
+const io = new Server(3000, {
+  pingInterval: 300,
+  pingTimeout: 200,
+  maxPayload: 1000000,
+  connectTimeout: 1000,
+  cors: {
+    origin: "*"
+  }
+});
+
+io.on("connection", (socket) => {
+  socket.emit("auth", socket.handshake.auth);
+
+  socket.on("message", (...args) => {
+    socket.emit.apply(socket, ["message-back", ...args]);
+  });
+
+  socket.on("message-with-ack", (...args) => {
+    const ack = args.pop();
+    ack(...args);
+  });
+});
+
+io.of("/custom").on("connection", (socket) => {
+  socket.emit("auth", socket.handshake.auth);
+});
+```
+
+----------------------------------------
+
+TITLE: Configuring Vite for Conditional ESM Imports JS
+DESCRIPTION: This snippet shows a Vite configuration example demonstrating how to set `resolve.conditions` to 'development'. This allows importing a specific build of the Socket.IO client (e.g., ESM build with debug package) based on the environment, enabling debug logs in the browser console during development.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io-client/CHANGELOG.md#_snippet_4
+
+LANGUAGE: js
+CODE:
+```
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    port: 4000
+  },
+  resolve: {
+    conditions: ["development"]
+  }
+})
+```
+
+----------------------------------------
+
+TITLE: Configuring Engine.IO WebSocket Engine JS
+DESCRIPTION: Explains how to configure a custom WebSocket engine, such as uws, for the underlying Engine.IO server used by Socket.IO. This involves requiring engine.io directly and passing the wsEngine option during server creation.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io/CHANGELOG.md#_snippet_15
+
+LANGUAGE: js
+CODE:
+```
+var engine = require('engine.io');
+var server = engine.listen(3000, {
+  wsEngine: 'uws'
+});
+```
+
+----------------------------------------
+
+TITLE: Starting Socket.IO Passport Example (Shell)
+DESCRIPTION: Command to install project dependencies and start the Node.js application locally. This command should be executed in the project's root directory.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/passport-jwt-example/README.md#_snippet_0
+
+LANGUAGE: Shell
+CODE:
+```
+npm ci && npm start
+```
+
+----------------------------------------
+
+TITLE: Disabling Trailing Slash in Socket.IO Client JS
+DESCRIPTION: This code demonstrates how to initialize the Socket.IO client with the `addTrailingSlash` option set to `false`. This configuration prevents the client from adding a trailing slash to the connection URL, changing the default path from `/socket.io/` to `/socket.io`.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io-client/CHANGELOG.md#_snippet_5
+
+LANGUAGE: js
+CODE:
+```
+import { io } from "socket.io-client";
+
+const socket = io("https://example.com", {
+  addTrailingSlash: false
+});
+```
+
+----------------------------------------
+
+TITLE: Starting Socket.IO Cluster Example (Bash)
+DESCRIPTION: These bash commands provide the necessary steps to set up and run the Socket.IO cluster example. They first start the required Redis server using Docker Compose in detached mode, then execute the server and client Node.js scripts.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/cluster-engine-redis/README.md#_snippet_0
+
+LANGUAGE: bash
+CODE:
+```
+# start the redis server
+$ docker compose up -d
+
+# run the server
+$ node server.js
+
+# run the client
+$ node client.js
+```
+
+----------------------------------------
+
+TITLE: Configuring Client Options for Headers and Transports
+DESCRIPTION: These snippets illustrate the behavior of 'extraHeaders' and 'transportOptions' when configuring the Engine.IO client, highlighting differences between browser and Node.js environments and transport types. It shows that 'extraHeaders' directly on the socket work in Node.js but not browser WebSockets, and 'transportOptions' must target specific transports (like polling) to apply headers where supported.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io-client/README.md#_snippet_5
+
+LANGUAGE: javascript
+CODE:
+```
+// WILL NOT WORK in the browser
+const socket = new Socket('http://localhost', {
+  extraHeaders: {
+    'X-Custom-Header-For-My-Project': 'will not be sent'
+  }
+});
+```
+
+LANGUAGE: javascript
+CODE:
+```
+// WILL NOT WORK
+const socket = new Socket('http://localhost', {
+  transports: ['websocket'], // polling is disabled
+  transportOptions: {
+    polling: {
+      extraHeaders: {
+        'X-Custom-Header-For-My-Project': 'will not be sent'
+      }
+    }
+  }
+});
+```
+
+LANGUAGE: javascript
+CODE:
+```
+// WILL WORK
+const socket = new Socket('http://localhost', {
+  transports: ['polling', 'websocket'],
+  transportOptions: {
+    polling: {
+      extraHeaders: {
+        'X-Custom-Header-For-My-Project': 'will be used'
+      }
+    }
+  }
+});
+```
+
+----------------------------------------
+
+TITLE: Controlling Binary Data Scanning Socket.IO JS
+DESCRIPTION: Shows how to use the binary(false) flag on Socket.IO sockets or namespaces to disable automatic scanning of objects for binary data before emitting. This can improve performance when you know the data is strictly non-binary.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io/CHANGELOG.md#_snippet_13
+
+LANGUAGE: js
+CODE:
+```
+// by default, the object is recursively scanned to check whether it contains some binary data
+// in the following example, the check is skipped in order to improve performance
+socket.binary(false).emit('plain-object', object);
+```
+
+LANGUAGE: js
+CODE:
+```
+// it also works at the namespace level
+io.binary(false).emit('plain-object', object);
+```
+
+----------------------------------------
+
+TITLE: Initializing Engine.IO Client Socket with Trailing Slash Disabled - JavaScript
+DESCRIPTION: This snippet demonstrates how to initialize an Engine.IO client socket and disable the default trailing slash behavior in the connection URL. It uses the `Socket` class from `engine.io-client` and sets the `addTrailingSlash` option to `false` during instantiation. This configuration changes the request URL from potentially ending with `/engine.io/` to `/engine.io`.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io-client/CHANGELOG.md#_snippet_5
+
+LANGUAGE: javascript
+CODE:
+```
+import { Socket } from "engine.io-client";
+
+const socket = new Socket("https://example.com", {
+  addTrailingSlash: false
+});
+```
+
+----------------------------------------
+
+TITLE: Disabling Trailing Slash in Engine.IO Server Path Node.js
+DESCRIPTION: This snippet shows how to disable the default trailing slash appended to the Engine.IO path using the `addTrailingSlash` option when attaching the server to an HTTP server. By setting `addTrailingSlash: false`, clients can connect using `/engine.io` instead of the default `/engine.io/`. This option is provided during the `attach` method call and affects the path handling for incoming connections. Requires an Engine.IO Server instance and an HTTP server instance.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io/CHANGELOG.md#_snippet_2
+
+LANGUAGE: javascript
+CODE:
+```
+import { Server } from "engine.io";
+
+const server = new Server();
+
+server.attach(httpServer, {
+  addTrailingSlash: false
+});
+```
+
+----------------------------------------
+
+TITLE: Migrating Engine.IO Server Initialization Syntax (v6.0.0)
+DESCRIPTION: This snippet illustrates a breaking change introduced in engine.io v6.0.0. The default export was removed, requiring users to explicitly import the 'Server' class and instantiate it instead of directly calling the 'require'd module as a function.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io/CHANGELOG.md#_snippet_3
+
+LANGUAGE: JavaScript
+CODE:
+```
+// Old syntax (<= v5.x)
+const eioServer = require("engine.io")(httpServer);
+```
+
+LANGUAGE: JavaScript
+CODE:
+```
+// New syntax (>= v6.0.0)
+const { Server } = require("engine.io");
+const eioServer = new Server(httpServer);
+```
+
+----------------------------------------
+
+TITLE: Handshake 'open' Packet Payload Example
+DESCRIPTION: Upon successful handshake, the server sends an 'open' packet with a JSON-encoded payload containing essential session details: the session ID (sid), available transport upgrades, ping interval, ping timeout, and maximum payload size.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/engine.io-protocol/v4-current.md#_snippet_4
+
+LANGUAGE: JSON
+CODE:
+```
+{
+  "sid": "lv_VI97HAXpY6yYWAAAC",
+  "upgrades": ["websocket"],
+  "pingInterval": 25000,
+  "pingTimeout": 20000,
+  "maxPayload": 1000000
+}
+```
+
+----------------------------------------
+
+TITLE: Starting Socket.IO Chat with Docker Compose
+DESCRIPTION: This command uses Docker Compose to build and start all services defined in the docker-compose.yml file in detached mode. This launches the Socket.IO nodes, the httpd proxy, and the redis instance. Prerequisite: Docker Compose installed and docker-compose.yml file present.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/cluster-httpd/README.md#_snippet_0
+
+LANGUAGE: Shell
+CODE:
+```
+$ docker-compose up -d
+```
+
+----------------------------------------
+
+TITLE: Renaming emitReserved() to _emitReserved() - JavaScript
+DESCRIPTION: Documents the breaking change in v4.0.0 where the internal method `emitReserved()` was renamed to `_emitReserved()` to enable proper code mangling. This snippet shows the new syntax for emitting a reserved event within a class that extends the `Emitter` base class from the `@socket.io/component-emitter` library.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io-component-emitter/History.md#_snippet_0
+
+LANGUAGE: javascript
+CODE:
+```
+import { Emitter } from "@socket.io/component-emitter";
+
+class MyEmitter extends Emitter {
+  foo() {
+    this._emitReserved("input");
+  }
+}
+```
+
+----------------------------------------
+
+TITLE: Using Emitter as a Mixin on a Prototype in JavaScript
+DESCRIPTION: This snippet illustrates how to apply the `Emitter` functionality to a JavaScript class prototype, making all instances of `User` automatically inherit event emitting methods. It requires the `User` class to be defined elsewhere.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io-component-emitter/Readme.md#_snippet_3
+
+LANGUAGE: javascript
+CODE:
+```
+import { Emitter } from '@socket.io/component-emitter';
+
+Emitter(User.prototype);
+```
+
+----------------------------------------
+
+TITLE: Stopping a Specific Socket.IO Node with Docker Compose
+DESCRIPTION: This command stops a single specified service (e.g., 'server-george') managed by Docker Compose. This demonstrates the system's resilience, allowing clients connected to the stopped node to reconnect to other available nodes. Prerequisite: Services must be running via `docker-compose up`.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/cluster-httpd/README.md#_snippet_1
+
+LANGUAGE: Shell
+CODE:
+```
+$ docker-compose stop server-george
+```
+
+----------------------------------------
+
+TITLE: Enabling Cookie Management for Node.js Socket - JavaScript
+DESCRIPTION: This snippet shows how to configure the Engine.IO client in Node.js to include cookies in HTTP requests. By setting the `withCredentials` option to `true` during `Socket` initialization, the client will automatically manage and send cookies, which is useful for applications using cookie-based sticky sessions.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io-client/CHANGELOG.md#_snippet_4
+
+LANGUAGE: javascript
+CODE:
+```
+import { Socket } from "engine.io-client";
+
+const socket = new Socket("https://example.com", {
+  withCredentials: true
+});
+```
+
+----------------------------------------
+
+TITLE: Initializing Engine.IO Client in Browser (Standalone)
+DESCRIPTION: This snippet shows how to include the standalone Engine.IO client script in an HTML page and connect to an Engine.IO server. It demonstrates basic event handling for 'open', 'message', and 'close'. It also includes an example of setting `binaryType` and sending/receiving binary data.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io-client/README.md#_snippet_0
+
+LANGUAGE: html
+CODE:
+```
+<script src="/path/to/engine.io.js"></script>
+<script>
+  // eio = Socket
+  const socket = eio('ws://localhost');
+  socket.on('open', () => {
+    socket.on('message', (data) => {});
+    socket.on('close', () => {});
+  });
+</script>
+```
+
+LANGUAGE: html
+CODE:
+```
+<script src="/path/to/engine.io.js"></script>
+<script>
+  const socket = eio('ws://localhost/');
+  socket.binaryType = 'blob';
+  socket.on('open', () => {
+    socket.send(new Int8Array(5));
+    socket.on('message', (blob) => {});
+    socket.on('close', () => {});
+  });
+</script>
+```
+
+----------------------------------------
+
+TITLE: Encoding and Decoding Multiple Packets (Payload) - JavaScript
+DESCRIPTION: Illustrates encoding and decoding a payload containing multiple engine.io packets, demonstrating handling of both binary data (ArrayBuffer/Int8Array) and string data within the same payload.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io-parser/Readme.md#_snippet_2
+
+LANGUAGE: JavaScript
+CODE:
+```
+const parser = require("engine.io-parser");
+
+const testBuffer = new Int8Array(10);
+for (let i = 0; i < testBuffer.length; i++) testBuffer[i] = i;
+
+const packets = [{ type: "message", data: testBuffer.buffer }, { type: "message", data: "hello" }];
+
+parser.encodePayload(packets, encoded => {
+  parser.decodePayload(encoded,
+    (packet, index, total) => {
+      const isLast = index + 1 == total;
+      if (!isLast) {
+        const buffer = new Int8Array(packet.data); // testBuffer
+      } else {
+        const message = packet.data; // "hello"
+      }
+    });
+});
+```
+
+----------------------------------------
+
+TITLE: Connecting Engine.IO Client in Node.js with Certificates
+DESCRIPTION: This snippet shows how to establish an Engine.IO connection in Node.js using client-side certificates and a CA certificate for secure communication. It defines options for key, cert, and ca file paths and passes them to the Socket constructor.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io-client/README.md#_snippet_3
+
+LANGUAGE: javascript
+CODE:
+```
+const opts = {
+  key: fs.readFileSync('test/fixtures/client.key'),
+  cert: fs.readFileSync('test/fixtures/client.crt'),
+  ca: fs.readFileSync('test/fixtures/ca.crt')
+};
+
+const { Socket } = require('engine.io-client');
+const socket = new Socket('ws://localhost', opts);
+socket.on('open', () => {
+  socket.on('message', (data) => {});
+  socket.on('close', () => {});
+});
+```
+
+----------------------------------------
+
+TITLE: Setting up WebTransport for Node.js - JavaScript
+DESCRIPTION: This snippet provides the necessary setup for using the WebTransport feature in a Node.js environment. It demonstrates importing the `WebTransport` class from the `@fails-components/webtransport` package and assigning it to the global scope so that the Engine.IO client can utilize it. This is required until WebTransport is natively supported in Node.js.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io-client/CHANGELOG.md#_snippet_3
+
+LANGUAGE: javascript
+CODE:
+```
+import { WebTransport } from "@fails-components/webtransport";
+
+global.WebTransport = WebTransport;
+```
+
+----------------------------------------
+
+TITLE: Listening Engine.IO Server Node.js
+DESCRIPTION: This snippet shows how to start an Engine.IO server that listens directly on a specified port. It demonstrates handling new connections and sending both string and binary data to connected sockets. Required dependency is the 'engine.io' module.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io/README.md#_snippet_0
+
+LANGUAGE: JavaScript
+CODE:
+```
+const engine = require('engine.io');
+const server = engine.listen(80);
+
+server.on('connection', socket => {
+  socket.send('utf 8 string');
+  socket.send(Buffer.from([0, 1, 2, 3, 4, 5])); // binary data
+});
+```
+
+----------------------------------------
+
+TITLE: Installing and Using Engine.IO Client with Browserify
+DESCRIPTION: This snippet illustrates how to install the Engine.IO client via npm and use it in a JavaScript file with 'require'. This code is intended to be bundled for the browser using Browserify. It shows the basic connection and event handling pattern.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io-client/README.md#_snippet_1
+
+LANGUAGE: bash
+CODE:
+```
+$ npm install engine.io-client
+```
+
+LANGUAGE: javascript
+CODE:
+```
+const { Socket } = require('engine.io-client');
+const socket = new Socket('ws://localhost');
+socket.on('open', () => {
+  socket.on('message', (data) => {});
+  socket.on('close', () => {});
+});
+```
+
+----------------------------------------
+
+TITLE: Receiving Socket.IO events via Polling (HTTP)
+DESCRIPTION: Shows an HTTP POST request from the client sending two Socket.IO EVENT packets via the polling transport. This corresponds to client-side `socket.emit('hello'); socket.emit('world');` actions. The server responds with 'ok'.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/socket.io-protocol/v4.md#_snippet_4
+
+LANGUAGE: Text
+CODE:
+```
+POST /socket.io/?EIO=3&transport=polling&t=N8hzxke&sid=lv_VI97HAXpY6yYWAAAC
+> Content-Type: text/plain; charset=UTF-8
+11:42["hello"]11:42["world"]
+< HTTP/1.1 200 OK
+< Content-Type: text/plain; charset=UTF-8
+ok
+```
+
+----------------------------------------
+
+TITLE: Opening Socket.IO connection via Polling (HTTP)
+DESCRIPTION: Shows the initial HTTP GET request and response for establishing an Engine.IO connection using the polling transport. The response contains the Engine.IO handshake data (sid, upgrades, ping intervals) and the initial Socket.IO CONNECT packet.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/socket.io-protocol/v4.md#_snippet_2
+
+LANGUAGE: Text
+CODE:
+```
+GET /socket.io/?EIO=3&transport=polling&t=N8hyd6w
+< HTTP/1.1 200 OK
+< Content-Type: text/plain; charset=UTF-8
+96:0{"sid":"lv_VI97HAXpY6yYWAAAC","upgrades":["websocket"],"pingInterval":25000,"pingTimeout":5000}2:40
+```
+
+----------------------------------------
+
+TITLE: Listening for Outgoing Packets Socket.IO JavaScript
+DESCRIPTION: This snippet demonstrates how to register a catch-all listener for all outgoing packets emitted by a specific socket using `socket.onAnyOutgoing()`. The listener function receives the event name and any arguments passed with the event.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io/CHANGELOG.md#_snippet_7
+
+LANGUAGE: javascript
+CODE:
+```
+socket.onAnyOutgoing((event, ...args) => {
+  console.log(event);
+});
+```
+
+----------------------------------------
+
+TITLE: Setting up and Running the Example Shell
+DESCRIPTION: This shell script provides the necessary commands to navigate to the example directory, install project dependencies using npm, and start the Node.js server to run the Socket.IO application.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/connection-state-recovery-example/README.md#_snippet_0
+
+LANGUAGE: shell
+CODE:
+```
+# choose your module syntax (either ES modules or CommonJS)
+$ cd esm/
+
+# install the dependencies
+$ npm i
+
+# start the server
+$ node index.js
+```
+
+----------------------------------------
+
+TITLE: Encoded BINARY_EVENT Packet With Ack ID (Header)
+DESCRIPTION: Shows the header string encoding for a BINARY_EVENT packet ('type': 5) with one binary attachment and acknowledgment ID 456, sent to the '/admin' namespace. The format includes type, attachments info, namespace, comma, ID, and the JSON payload with a placeholder.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/socket.io-protocol/v3.md#_snippet_19
+
+LANGUAGE: Socket.IO Encoding
+CODE:
+```
+51-/admin,456["project:delete",{"_placeholder":true,"num":0}]
+```
+
+----------------------------------------
+
+TITLE: Implementing Socket.IO Packet Acknowledgement (JS)
+DESCRIPTION: Provides an example of sending an event ('hello') from one side and expecting a callback (acknowledgement) from the other. It shows how the receiver handles the event and uses the provided 'ack' function to send a response back to the sender.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/socket.io-protocol/v5-current.md#_snippet_2
+
+LANGUAGE: js
+CODE:
+```
+// on one side
+socket.emit("hello", "foo", (arg) => {
+  console.log("received", arg);
+});
+
+// on the other side
+socket.on("hello", (arg, ack) => {
+  ack("bar");
+});
+```
+
+----------------------------------------
+
+TITLE: Adding Catch-All Listener for Outgoing Packets Socket.IO Client JS
+DESCRIPTION: This snippet introduces the `onAnyOutgoing()` method, allowing developers to register a single listener that captures all outgoing packets from the client. The listener receives the event name and all arguments emitted, useful for logging or inspecting client-side emissions.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io-client/CHANGELOG.md#_snippet_10
+
+LANGUAGE: js
+CODE:
+```
+socket.onAnyOutgoing((event, ...args) => {
+  console.log(event);
+});
+```
+
+----------------------------------------
+
+TITLE: Configuring Cookie Options with cookie Object (Node.js)
+DESCRIPTION: Shows the updated method (4.0.0-alpha.0 and later) for configuring Engine.IO cookie options by providing them within a nested cookie object. This new structure supports additional options like domain, maxAge, and sameSite.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io/CHANGELOG.md#_snippet_9
+
+LANGUAGE: javascript
+CODE:
+```
+new Server({
+  cookie: {
+    name: "test",
+    httpOnly: false,
+    path: "/custom"
+  }
+})
+```
+
+----------------------------------------
+
+TITLE: Handling Socket Join/Leave Sync Socket.IO JS
+DESCRIPTION: Documents the breaking change in Socket.IO v3 where socket.join() and socket.leave() became synchronous. It shows the previous asynchronous usage with a callback and the new synchronous approach, noting the optional await for custom adapters.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io/CHANGELOG.md#_snippet_9
+
+LANGUAGE: js
+CODE:
+```
+socket.join("room1", () => {
+ io.to("room1").emit("hello");
+});
+```
+
+LANGUAGE: js
+CODE:
+```
+socket.join("room1");
+io.to("room1").emit("hello");
+// or await socket.join("room1"); for custom adapters
+```
+
+----------------------------------------
+
+TITLE: Applying Code Formatting for All Workspaces (Bash)
+DESCRIPTION: Runs the `format:fix` npm script for all workspaces in the monorepo. This command typically uses a tool like Prettier to automatically format the code according to the project's style guidelines, ensuring consistency across the codebase.
+SOURCE: https://github.com/socketio/socket.io/blob/main/CONTRIBUTING.md#_snippet_3
+
+LANGUAGE: bash
+CODE:
+```
+npm run format:fix -ws
+```
+
+----------------------------------------
+
+TITLE: Setup Frontend: Install Dependencies and Run (Shell)
+DESCRIPTION: These commands install the necessary Node.js packages for the frontend application using npm and then start the development server. It requires Node.js and npm to be installed on the system.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/private-messaging/README.md#_snippet_0
+
+LANGUAGE: Shell
+CODE:
+```
+npm install
+npm run serve
+```
+
+----------------------------------------
+
+TITLE: Run Standalone Test Suite Bash
+DESCRIPTION: This command executes the standalone test suite for engine.io-client, which includes both Node.js and browser tests. Running this requires 'make' and potentially a Sauce Labs account setup for browser tests via zuul as mentioned in the documentation.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io-client/README.md#_snippet_7
+
+LANGUAGE: bash
+CODE:
+```
+make test
+
+```
+
+----------------------------------------
+
+TITLE: Starting Development Server (bash)
+DESCRIPTION: This snippet provides commands to launch the local development server for the Next.js project. It shows equivalent commands using different JavaScript package managers: npm, yarn, pnpm, and bun. Running one of these commands starts the server, typically accessible at http://localhost:3000.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/nextjs-pages-router/README.md#_snippet_0
+
+LANGUAGE: bash
+CODE:
+```
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
+```
+
+----------------------------------------
+
+TITLE: Encoded ACK Packet Example
+DESCRIPTION: Shows the default string encoding for an ACK packet ('type': 3) for a packet from the '/admin' namespace with ID 456. The format is type, slash, namespace, comma, ID, and the JSON payload.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/socket.io-protocol/v3.md#_snippet_16
+
+LANGUAGE: Socket.IO Encoding
+CODE:
+```
+3/admin,456[]
+```
+
+----------------------------------------
+
+TITLE: Encoded ERROR Packet Example
+DESCRIPTION: Shows the default string encoding for an ERROR packet ('type': 4) related to the '/admin' namespace. The format is type, slash, namespace, comma, and the JSON-stringified error message.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/socket.io-protocol/v3.md#_snippet_17
+
+LANGUAGE: Socket.IO Encoding
+CODE:
+```
+4/admin,"Not authorized"
+```
+
+----------------------------------------
+
+TITLE: Example Socket.IO DISCONNECT Packet - JSON
+DESCRIPTION: Illustrates the JSON structure of a Socket.IO packet used by one side to signal disconnection from a specific namespace (e.g., '/admin'). The 'type' field is 1 for DISCONNECT.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/socket.io-protocol/v3.md#_snippet_4
+
+LANGUAGE: json
+CODE:
+```
+{
+  "type": 1,
+  "nsp": "/admin"
+}
+```
+
+----------------------------------------
+
+TITLE: Starting Socket.IO Server (Bash)
+DESCRIPTION: This sequence of commands navigates into the 'server' directory, installs its dependencies using npm, and then starts the Socket.IO server. This server is necessary for the React Native app to communicate via websockets.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/ReactNativeExample/README.md#_snippet_3
+
+LANGUAGE: bash
+CODE:
+```
+cd server
+
+npm install
+
+npm start
+```
+
+----------------------------------------
+
+TITLE: Running the Angular Socket.IO Frontend (shell)
+DESCRIPTION: Provides shell commands to navigate to the Angular client directory, install project dependencies using npm, and start the development server for the frontend application. This allows you to access and interact with the Socket.IO client interface.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/basic-crud-application/README.md#_snippet_0
+
+LANGUAGE: shell
+CODE:
+```
+cd angular-client\nnpm install\nnpm start
+```
+
+----------------------------------------
+
+TITLE: Running the Default Socket.IO Server (shell)
+DESCRIPTION: Provides shell commands to navigate to the default server directory (typically the in-memory version), install project dependencies using npm, and start the backend Socket.IO server application. This server will handle client connections and data operations.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/basic-crud-application/README.md#_snippet_1
+
+LANGUAGE: shell
+CODE:
+```
+cd server\nnpm install\nnpm start
+```
+
+----------------------------------------
+
+TITLE: Running Socket.IO Postgres Example Commands bash
+DESCRIPTION: Lists the necessary bash commands to get the Socket.IO example with the Postgres adapter up and running. It includes commands to start the database server via Docker Compose, run the Node.js server cluster, and start a client application, with comments indicating the purpose of each step. Note that the '$ ' prefix commonly shown in documentation is omitted from the actual command lines.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/postgres-adapter-example/README.md#_snippet_0
+
+LANGUAGE: bash
+CODE:
+```
+docker compose up -d\n\n# run the cluster\nnode cluster.js\n\n# run the client\nnode client.js
+```
+
+----------------------------------------
+
+TITLE: Encoded BINARY_EVENT Packet Without Ack (Header)
+DESCRIPTION: Shows the header string encoding for a BINARY_EVENT packet ('type': 5) with one binary attachment, sent to the default namespace ('/'). The format includes type, number of attachments with a hyphen, and the JSON payload with a placeholder.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/socket.io-protocol/v3.md#_snippet_18
+
+LANGUAGE: Socket.IO Encoding
+CODE:
+```
+51-["hello",{"_placeholder":true,"num":0}]
+```
+
+----------------------------------------
+
+TITLE: Example Socket.IO CONNECT Packet - JSON
+DESCRIPTION: Shows the JSON structure of a Socket.IO packet used to request or confirm a connection to a specific namespace (e.g., '/admin'). The 'type' field is 0 for CONNECT.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/socket.io-protocol/v3.md#_snippet_2
+
+LANGUAGE: json
+CODE:
+```
+{
+  "type": 0,
+  "nsp": "/admin"
+}
+```
+
+----------------------------------------
+
+TITLE: Building Nuxt 3 Application for Production (Bash)
+DESCRIPTION: These commands compile and optimize the Nuxt 3 application code for production deployment. The build process typically generates static assets and server-side rendering bundles (if applicable) in a .output or dist directory. Run the command corresponding to your package manager to prepare the application for hosting.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/nuxt-example/README.md#_snippet_2
+
+LANGUAGE: bash
+CODE:
+```
+npm run build
+```
+
+LANGUAGE: bash
+CODE:
+```
+pnpm run build
+```
+
+LANGUAGE: bash
+CODE:
+```
+yarn build
+```
+
+LANGUAGE: bash
+CODE:
+```
+bun run build
+```
+
+----------------------------------------
+
+TITLE: Example Socket.IO EVENT Packet - JSON
+DESCRIPTION: Shows the JSON structure for a standard Socket.IO EVENT packet ('type': 2) sent to the default namespace ('/'). It includes an arbitrary payload in the 'data' field.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/socket.io-protocol/v3.md#_snippet_5
+
+LANGUAGE: json
+CODE:
+```
+{
+  "type": 2,
+  "nsp": "/",
+  "data": ["hello", 1]
+}
+```
+
+----------------------------------------
+
+TITLE: Encoded CONNECT Packet Default Namespace
+DESCRIPTION: Shows the default string encoding format for a Socket.IO CONNECT packet ('type': 0) sent to the default namespace ('/'). It is encoded simply as the packet type integer.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/socket.io-protocol/v3.md#_snippet_11
+
+LANGUAGE: Socket.IO Encoding
+CODE:
+```
+0
+```
+
+----------------------------------------
+
+TITLE: Encoded Payload Example (Binary, XHR2 Supported)
+DESCRIPTION: This buffer representation demonstrates the binary encoding format used when XHR2 is supported. It includes a byte header (0 for string, 1 for binary), length in bytes, a separator byte (255), and the raw packet data (type + content).
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/engine.io-protocol/v3.md#_snippet_3
+
+LANGUAGE: text
+CODE:
+```
+buffer <00 04 ff 34 e2 82 ac 01 04 ff 01 02 03 04>
+```
+
+----------------------------------------
+
+TITLE: Linting and Fixing Vue.js Client Code - Bash
+DESCRIPTION: This command runs code linters to check for style issues and potential errors in the project files. It can also automatically fix some issues depending on the linting configuration.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/basic-crud-application/vue-client/README.md#_snippet_3
+
+LANGUAGE: bash
+CODE:
+```
+yarn lint
+```
+
+----------------------------------------
+
+TITLE: Configuring Socket.IO Server with WebTransport
+DESCRIPTION: Demonstrates how to configure a Socket.IO server to use WebTransport as an underlying transport using the `@fails-components/webtransport` package until native Node.js support is available. It requires setting up an HTTPS server and an HTTP/3 server with valid certificates and keys, then integrating the Socket.IO engine with the HTTP/3 server's session stream.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io/CHANGELOG.md#_snippet_0
+
+LANGUAGE: javascript
+CODE:
+```
+import { readFileSync } from "fs";
+import { createServer } from "https";
+import { Server } from "socket.io";
+import { Http3Server } from "@fails-components/webtransport";
+
+// WARNING: the total length of the validity period MUST NOT exceed two weeks (https://w3c.github.io/webtransport/#custom-certificate-requirements)
+const cert = readFileSync("/path/to/my/cert.pem");
+const key = readFileSync("/path/to/my/key.pem");
+
+const httpsServer = createServer({
+  key,
+  cert
+});
+
+httpsServer.listen(3000);
+
+const io = new Server(httpsServer, {
+  transports: ["polling", "websocket", "webtransport"] // WebTransport is not enabled by default
+});
+
+const h3Server = new Http3Server({
+  port: 3000,
+  host: "0.0.0.0",
+  secret: "changeit",
+  cert,
+  privKey: key,
+});
+
+(async () => {
+  const stream = await h3Server.sessionStream("/socket.io/");
+  const sessionReader = stream.getReader();
+
+  while (true) {
+    const { done, value } = await sessionReader.read();
+    if (done) {
+      break;
+    }
+    io.engine.onWebTransportSession(value);
+  }
+})();
+
+h3Server.startServer();
+```
+
+----------------------------------------
+
+TITLE: Using Emitter as a Mixin on an Object in JavaScript
+DESCRIPTION: This snippet shows how to add event emitting capabilities to a plain JavaScript object by passing it to the `Emitter` function. The object `user` gains methods like `emit`.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io-component-emitter/Readme.md#_snippet_2
+
+LANGUAGE: javascript
+CODE:
+```
+import { Emitter } from '@socket.io/component-emitter';
+
+var user = { name: 'tobi' };
+Emitter(user);
+
+user.emit('im a user');
+```
+
+----------------------------------------
+
+TITLE: Encoded Payload Example (String Only)
+DESCRIPTION: This string shows the encoded format for a payload containing only string data when XHR2 is not supported. It consists of character length-prefixed packets concatenated together, using ':' as a separator.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/engine.io-protocol/v3.md#_snippet_2
+
+LANGUAGE: text
+CODE:
+```
+6:4hello2:4€
+```
+
+----------------------------------------
+
+TITLE: Updating Engine.IO wsEngine Option Syntax (v5.0.0)
+DESCRIPTION: This snippet highlights a breaking change in engine.io v5.0.0 regarding the 'wsEngine' option. Previously, it accepted a string identifier; now, it requires the actual WebSocket server constructor function as the value.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io/CHANGELOG.md#_snippet_5
+
+LANGUAGE: JavaScript
+CODE:
+```
+// Old wsEngine syntax (<= v4.x)
+const eioServer = require("engine.io")(httpServer, {
+  wsEngine: "eiows"
+});
+```
+
+LANGUAGE: JavaScript
+CODE:
+```
+// New wsEngine syntax (>= v5.0.0)
+const eioServer = require("engine.io")(httpServer, {
+  wsEngine: require("eiows").Server
+});
+```
+
+----------------------------------------
+
+TITLE: Starting Vue.js Client Development Server - Bash
+DESCRIPTION: This command starts a local development server with hot-reloading enabled. It is used during development to run and test the application in a browser.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/basic-crud-application/vue-client/README.md#_snippet_1
+
+LANGUAGE: bash
+CODE:
+```
+yarn serve
+```
+
+----------------------------------------
+
+TITLE: Installing NestJS Project Dependencies using npm
+DESCRIPTION: This command installs all necessary dependencies for the NestJS starter project using the npm package manager. It reads the `package.json` file and downloads modules listed under `dependencies` and `devDependencies`.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/nestjs-example/README.md#_snippet_0
+
+LANGUAGE: bash
+CODE:
+```
+$ npm install
+```
+
+----------------------------------------
+
+TITLE: Encoding and Decoding Binary socket.io Packet - JavaScript
+DESCRIPTION: Shows how to handle binary data within a socket.io packet using the `socket.io-parser`. It encodes a packet containing `Buffer` and `Blob` data using the `Encoder` and decodes it with the `Decoder`. The example verifies that the decoded binary data is correctly represented as `Buffer` instances.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io-parser/Readme.md#_snippet_1
+
+LANGUAGE: JavaScript
+CODE:
+```
+var parser = require('socket.io-parser');
+var encoder = new parser.Encoder();
+var packet = {
+  type: parser.BINARY_EVENT,
+  data: {i: new Buffer(1234), j: new Blob([new ArrayBuffer(2)])},
+  id: 15
+};
+encoder.encode(packet, function(encodedPackets) {
+  var decoder = new parser.Decoder();
+  decoder.on('decoded', function(decodedPacket) {
+    // decodedPacket.type == parser.BINARY_EVENT
+    // Buffer.isBuffer(decodedPacket.data.i) == true
+    // Buffer.isBuffer(decodedPacket.data.j) == true
+    // decodedPacket.id == 15
+  });
+
+  for (var i = 0; i < encodedPackets.length; i++) {
+    decoder.add(encodedPackets[i]);
+  }
+});
+```
+
+----------------------------------------
+
+TITLE: Building Vue.js Client for Production - Bash
+DESCRIPTION: This command compiles and minifies the Vue.js client application code for production deployment. It generates optimized static assets ready to be served.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/basic-crud-application/vue-client/README.md#_snippet_2
+
+LANGUAGE: bash
+CODE:
+```
+yarn build
+```
+
+----------------------------------------
+
+TITLE: Including Bundled JavaScript in HTML - HTML
+DESCRIPTION: HTML tag used to include the bundled JavaScript file (created by Browserify) into a web page, making the `engine.io-parser` functionality available in the browser environment.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io-parser/Readme.md#_snippet_4
+
+LANGUAGE: HTML
+CODE:
+```
+<script src="/path/to/bundle.js"></script>
+```
+
+----------------------------------------
+
+TITLE: Scaling Socket.IO Chat Demo Server with Docker Compose (Shell)
+DESCRIPTION: This command scales the 'server' service of the Socket.IO chat demo to 7 instances while keeping other services running. It uses Docker Compose in detached mode, showcasing how to run multiple Socket.IO nodes which requires session stickiness handled by Traefik.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/cluster-traefik/README.md#_snippet_1
+
+LANGUAGE: shell
+CODE:
+```
+$ docker-compose up -d --scale=server=7
+```
+
+----------------------------------------
+
+TITLE: Installing Socket.IO Cluster Engine with NPM
+DESCRIPTION: This command uses the npm package manager to install the @socket.io/cluster-engine library, adding it as a dependency to your project.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io-cluster-engine/README.md#_snippet_0
+
+LANGUAGE: Shell
+CODE:
+```
+npm i @socket.io/cluster-engine
+```
+
+----------------------------------------
+
+TITLE: Encoding and Decoding Standard socket.io Packet - JavaScript
+DESCRIPTION: Demonstrates how to encode a basic socket.io packet with string data using the `Encoder` and decode the resulting encoded packets using the `Decoder`. It requires the `socket.io-parser` library. The process involves creating instances of `Encoder` and `Decoder`, encoding a packet object, and adding the encoded segments to the decoder.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io-parser/Readme.md#_snippet_0
+
+LANGUAGE: JavaScript
+CODE:
+```
+var parser = require('socket.io-parser');
+var encoder = new parser.Encoder();
+var packet = {
+  type: parser.EVENT,
+  data: 'test-packet',
+  id: 13
+};
+encoder.encode(packet, function(encodedPackets) {
+  var decoder = new parser.Decoder();
+  decoder.on('decoded', function(decodedPacket) {
+    // decodedPacket.type == parser.EVENT
+    // decodedPacket.data == 'test-packet'
+    // decodedPacket.id == 13
+  });
+
+  for (var i = 0; i < encodedPackets.length; i++) {
+    decoder.add(encodedPackets[i]);
+  }
+});
+```
+
+----------------------------------------
+
+TITLE: Installing Vue.js Client Project Dependencies - Bash
+DESCRIPTION: This command installs all required project dependencies listed in the package.json file using the yarn package manager. It must be run after cloning the repository to prepare the project for development or building.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/basic-crud-application/vue-client/README.md#_snippet_0
+
+LANGUAGE: bash
+CODE:
+```
+yarn install
+```
+
+----------------------------------------
+
+TITLE: Install Project Dependencies npm
+DESCRIPTION: This command installs all the necessary project dependencies listed in the package.json file using npm. This prepares the project environment for development, testing, or building the library. It requires Node.js and npm (or a compatible package manager) to be installed.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io-client/README.md#_snippet_10
+
+LANGUAGE: bash
+CODE:
+```
+npm install
+
+```
+
+----------------------------------------
+
+TITLE: Starting Socket.IO Chat Demo (Shell)
+DESCRIPTION: These shell commands are used to set up and launch the chat demo. `npm i` installs required Node.js dependencies from the package.json file, and `npm start` executes the predefined start script to launch the server application.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/chat/README.md#_snippet_0
+
+LANGUAGE: shell
+CODE:
+```
+$ npm i
+$ npm start
+```
+
+----------------------------------------
+
+TITLE: Installing Dependencies and Starting Application (Shell)
+DESCRIPTION: This snippet shows the command to install project dependencies and then start the application. It uses `npm i` for installation and `npm start` to run the defined start script in the package.json. This is typically used to set up and run a demo or test environment for the Socket.IO custom parsers.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/custom-parsers/README.md#_snippet_0
+
+LANGUAGE: Shell
+CODE:
+```
+$ npm i && npm start
+```
+
+----------------------------------------
+
+TITLE: Setup Server: Navigate, Install, and Start (Shell)
+DESCRIPTION: These commands first change the current directory to 'server', install the required Node.js packages for the server using npm, and then start the server process. It assumes the server code is located in a subdirectory named 'server' and requires Node.js and npm.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/private-messaging/README.md#_snippet_1
+
+LANGUAGE: Shell
+CODE:
+```
+cd server
+npm install
+npm start
+```
+
+----------------------------------------
+
+TITLE: Running Angular End-to-End Tests (Protractor)
+DESCRIPTION: Run the end-to-end tests for the application via the Protractor framework. This tests the application flow from a user's perspective.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/angular-todomvc/README.md#_snippet_7
+
+LANGUAGE: shell
+CODE:
+```
+ng e2e
+```
+
+----------------------------------------
+
+TITLE: Sending Socket.IO event via Polling (HTTP)
+DESCRIPTION: Demonstrates an HTTP GET request and response carrying a Socket.IO EVENT packet via the polling transport. This corresponds to a server-side `socket.emit('hey', 'Jude')` action being received by the client.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/socket.io-protocol/v4.md#_snippet_3
+
+LANGUAGE: Text
+CODE:
+```
+GET /socket.io/?EIO=3&transport=polling&t=N8hyd7H&sid=lv_VI97HAXpY6yYWAAAC
+< HTTP/1.1 200 OK
+< Content-Type: text/plain; charset=UTF-8
+16:42["hey","Jude"]
+```
+
+----------------------------------------
+
+TITLE: Setting up Socket.IO WebTransport Server Shell
+DESCRIPTION: Provides the necessary shell commands to get the Socket.IO WebTransport example running. This includes generating a self-signed certificate for secure connections, installing required Node.js packages using npm, starting the main server process via Node.js, and finally launching the client application in a compatible browser (like Chrome). Ensure `./generate_cert.sh` and `./open_chrome.sh` scripts exist and are executable.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/webtransport/README.md#_snippet_0
+
+LANGUAGE: shell
+CODE:
+```
+# generate a self-signed certificate
+$ ./generate_cert.sh
+
+# install dependencies
+$ npm i
+
+# start the server
+$ node index.js
+
+# open a Chrome browser
+$ ./open_chrome.sh
+```
+
+----------------------------------------
+
+TITLE: Starting Socket.IO Server using Node.js Cluster (Bash)
+DESCRIPTION: This command executes the server script `server.js`. The script is configured to use the Node.js cluster module to spawn multiple Socket.IO server instances across CPU cores, utilizing the `@socket.io/cluster-engine` for inter-worker communication and state synchronization.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/cluster-engine-node-cluster/README.md#_snippet_0
+
+LANGUAGE: bash
+CODE:
+```
+$ node server.js
+```
+
+----------------------------------------
+
+TITLE: Running End-to-End Tests for NestJS App using npm
+DESCRIPTION: This command executes the end-to-end (e2e) tests for the NestJS application. E2e tests simulate user scenarios to test the entire application flow.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/nestjs-example/README.md#_snippet_5
+
+LANGUAGE: bash
+CODE:
+```
+$ npm run test:e2e
+```
+
+----------------------------------------
+
+TITLE: Generating Test Coverage Report using npm
+DESCRIPTION: This command runs the tests (usually unit and/or e2e) and generates a code coverage report. The report shows what percentage of the codebase is executed by the tests.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/nestjs-example/README.md#_snippet_6
+
+LANGUAGE: bash
+CODE:
+```
+$ npm run test:cov
+```
+
+----------------------------------------
+
+TITLE: Upgrading to WebSocket and exchanging packets
+DESCRIPTION: Illustrates the HTTP request to upgrade the connection from polling to WebSocket, followed by examples of raw WebSocket frames containing Engine.IO probe requests/responses, upgrade packets, Socket.IO event packets, connect packets (for namespaces), binary ack packets, and heartbeat packets (ping/pong).
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/socket.io-protocol/v4.md#_snippet_5
+
+LANGUAGE: Text
+CODE:
+```
+GET /socket.io/?EIO=3&transport=websocket&sid=lv_VI97HAXpY6yYWAAAC
+< HTTP/1.1 101 Switching Protocols
+
+< 2probe
+> 3probe
+> 5
+> 42["hello"]
+> 42["world"]
+> 40/admin,
+< 40/admin,
+> 42/admin,1["tellme"]
+< 461-/admin,1[{"_placeholder":true,"num":0}]
+< <binary>
+> 2
+< 3
+> 1
+```
+
+----------------------------------------
+
+TITLE: Running Angular Unit Tests (Shell)
+DESCRIPTION: This command executes the unit tests configured for the Angular application. It typically uses Karma test runner to run tests written for individual components, services, and other code units.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/basic-crud-application/angular-client/README.md#_snippet_3
+
+LANGUAGE: Shell
+CODE:
+```
+ng test
+```
+
+----------------------------------------
+
+TITLE: Running Unit Tests for NestJS App using npm
+DESCRIPTION: This command executes the unit tests defined for the NestJS application. Unit tests verify individual components or functions in isolation.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/nestjs-example/README.md#_snippet_4
+
+LANGUAGE: bash
+CODE:
+```
+$ npm run test
+```
+
+----------------------------------------
+
+TITLE: Starting Angular Development Server (CLI)
+DESCRIPTION: Run this command to launch a local development server for the Angular application. It serves the app at http://localhost:4200/ and automatically reloads upon file changes.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/angular-todomvc/README.md#_snippet_0
+
+LANGUAGE: shell
+CODE:
+```
+ng serve
+```
+
+----------------------------------------
+
+TITLE: Previewing Nuxt 3 Production Build Locally (Bash)
+DESCRIPTION: These commands allow you to serve and test the production build of the Nuxt 3 application locally before deploying it. This is crucial for verifying that the built version functions as expected in an environment closer to production. Execute the command matching the package manager used for the build.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/nuxt-example/README.md#_snippet_3
+
+LANGUAGE: bash
+CODE:
+```
+npm run preview
+```
+
+LANGUAGE: bash
+CODE:
+```
+pnpm run preview
+```
+
+LANGUAGE: bash
+CODE:
+```
+yarn run preview
+```
+
+LANGUAGE: bash
+CODE:
+```
+bun run preview
+```
+
+----------------------------------------
+
+TITLE: Starting Next.js Development Server (Bash)
+DESCRIPTION: This snippet provides commands to launch the local development server for the Next.js application. It includes options for users preferring different Node.js package managers such as npm, yarn, pnpm, or bun. The server typically becomes accessible at http://localhost:3000.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/nextjs-app-router/README.md#_snippet_0
+
+LANGUAGE: bash
+CODE:
+```
+npm run dev
+```
+
+LANGUAGE: bash
+CODE:
+```
+yarn dev
+```
+
+LANGUAGE: bash
+CODE:
+```
+pnpm dev
+```
+
+LANGUAGE: bash
+CODE:
+```
+bun dev
+```
+
+----------------------------------------
+
+TITLE: Starting Nuxt 3 Development Server (Bash)
+DESCRIPTION: These commands initiate the local development server for the Nuxt 3 application, typically running at http://localhost:3000. The development server provides features like hot module replacement, making it suitable for interactive development. Use the command that matches your project's package manager.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/nuxt-example/README.md#_snippet_1
+
+LANGUAGE: bash
+CODE:
+```
+npm run dev
+```
+
+LANGUAGE: bash
+CODE:
+```
+pnpm run dev
+```
+
+LANGUAGE: bash
+CODE:
+```
+yarn dev
+```
+
+LANGUAGE: bash
+CODE:
+```
+bun run dev
+```
+
+----------------------------------------
+
+TITLE: Running NestJS App in Watch Mode using npm
+DESCRIPTION: This command starts the NestJS application in watch mode. It's designed for development, automatically recompiling and often restarting the server when source files change.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/nestjs-example/README.md#_snippet_2
+
+LANGUAGE: bash
+CODE:
+```
+$ npm run start:dev
+```
+
+----------------------------------------
+
+TITLE: Running Client App - Bash
+DESCRIPTION: This snippet provides the bash commands to install the necessary Node.js dependencies for the client-side application and then launch the application using the `nw` command-line tool, which starts the NW.js runtime in the current directory.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/nwjs-example/README.md#_snippet_0
+
+LANGUAGE: bash
+CODE:
+```
+npm i
+nw .
+```
+
+----------------------------------------
+
+TITLE: Running NestJS App in Development Mode using npm
+DESCRIPTION: This command starts the NestJS application in standard development mode. It typically compiles the TypeScript code and runs the resulting JavaScript.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/nestjs-example/README.md#_snippet_1
+
+LANGUAGE: bash
+CODE:
+```
+$ npm run start
+```
+
+----------------------------------------
+
+TITLE: Setting up Engine.IO WebTransport with @fails-components/webtransport Node.js
+DESCRIPTION: This snippet demonstrates how to configure an Engine.IO server to use WebTransport as a transport layer using the `@fails-components/webtransport` package. It requires setting up an HTTPS server with a valid certificate and key, configuring the Engine.IO server to include "webtransport" in its transports, and attaching it to the HTTPS server. Additionally, it shows how to initialize an `Http3Server` and forward incoming WebTransport sessions to the Engine.IO server via the `onWebTransportSession` method. This setup is a workaround until native Node.js WebTransport support is available. Requires `fs`, `https`, `engine.io`, and `@fails-components/webtransport`. The certificate's validity period must not exceed two weeks according to WebTransport requirements.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io/CHANGELOG.md#_snippet_0
+
+LANGUAGE: javascript
+CODE:
+```
+import { readFileSync } from "fs";
+import { createServer } from "https";
+import { Server } from "engine.io";
+import { Http3Server } from "@fails-components/webtransport";
+
+// WARNING: the total length of the validity period MUST NOT exceed two weeks (https://w3c.github.io/webtransport/#custom-certificate-requirements)
+const cert = readFileSync("/path/to/my/cert.pem");
+const key = readFileSync("/path/to/my/key.pem");
+
+const httpsServer = createServer({
+  key,
+  cert
+});
+
+httpsServer.listen(3000);
+
+const engine = new Server({
+  transports: ["polling", "websocket", "webtransport"] // WebTransport is not enabled by default
+});
+
+engine.attach(httpsServer);
+
+const h3Server = new Http3Server({
+  port: 3000,
+  host: "0.0.0.0",
+  secret: "changeit",
+  cert,
+  privKey: key,
+});
+
+(async () => {
+  const stream = await h3Server.sessionStream("/engine.io/");
+  const sessionReader = stream.getReader();
+
+  while (true) {
+    const { done, value } = await sessionReader.read();
+    if (done) {
+      break;
+    }
+    engine.onWebTransportSession(value);
+  }
+})();
+
+h3Server.startServer();
+```
+
+----------------------------------------
+
+TITLE: Running the Example Project (Shell)
+DESCRIPTION: Provides the shell command required to set up and start the example application. It first installs project dependencies using `npm ci` and then starts the server with `npm start`.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/passport-example/README.md#_snippet_0
+
+LANGUAGE: Shell
+CODE:
+```
+$ npm ci && npm start
+```
+
+----------------------------------------
+
+TITLE: Example Engine.IO JSONP Frame Output
+DESCRIPTION: This string shows an example of the JavaScript code returned by the server for the JSONP polling transport. It wraps the encoded payload within a function call specified by the 'j' query parameter provided by the client.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/engine.io-protocol/v3.md#_snippet_5
+
+LANGUAGE: text
+CODE:
+```
+___eio[4]("packet data");
+```
+
+----------------------------------------
+
+TITLE: Sending Data via HTTP Long-Polling
+DESCRIPTION: To send data packets using the HTTP long-polling transport, the client initiates an HTTP POST request. The packets are encoded in the request body. The server responds with HTTP 200 and 'ok' upon success.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/engine.io-protocol/v4-current.md#_snippet_0
+
+LANGUAGE: HTTP
+CODE:
+```
+CLIENT                                                 SERVER
+
+  │                                                      │
+  │   POST /engine.io/?EIO=4&transport=polling&sid=...   │
+  │ ───────────────────────────────────────────────────► │
+  │ ◄──────────────────────────────────────────────────┘ │
+  │                        HTTP 200                      │
+  │                                                      │
+```
+
+----------------------------------------
+
+TITLE: Running Socket.IO Whiteboard Project (Shell)
+DESCRIPTION: This shell command installs the necessary project dependencies using npm's 'clean install' and then starts the application server. Users can access the whiteboard in their browser after running this command.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/whiteboard/README.md#_snippet_0
+
+LANGUAGE: Shell
+CODE:
+```
+npm ci && npm start
+```
+
+----------------------------------------
+
+TITLE: Installing Nuxt 3 Project Dependencies (Bash)
+DESCRIPTION: These commands install the necessary project dependencies defined in the package.json file for a Nuxt 3 application using various Node.js package managers. Execute the command corresponding to the package manager used in your project to ensure all required packages are installed.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/nuxt-example/README.md#_snippet_0
+
+LANGUAGE: bash
+CODE:
+```
+npm install
+```
+
+LANGUAGE: bash
+CODE:
+```
+pnpm install
+```
+
+LANGUAGE: bash
+CODE:
+```
+yarn install
+```
+
+LANGUAGE: bash
+CODE:
+```
+bun install
+```
+
+----------------------------------------
+
+TITLE: Starting Socket.IO Server (npm)
+DESCRIPTION: Execute this npm script to start the backend server that handles Socket.IO communication for the application. This is required for the app's real-time features.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/angular-todomvc/README.md#_snippet_1
+
+LANGUAGE: shell
+CODE:
+```
+npm run start:server
+```
+
+----------------------------------------
+
+TITLE: Starting Socket.IO Client (Bash)
+DESCRIPTION: This command executes the client script `client.js`. This script is designed to connect to the Socket.IO server cluster started by the previous command, demonstrating how a client interacts with the clustered server setup.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/cluster-engine-node-cluster/README.md#_snippet_1
+
+LANGUAGE: bash
+CODE:
+```
+$ node client.js
+```
+
+----------------------------------------
+
+TITLE: Initializing Emitter as an Instance in JavaScript
+DESCRIPTION: This snippet demonstrates how to create a new instance of the `Emitter` class and emit an event from it. It requires importing the `Emitter` class from the library.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io-component-emitter/Readme.md#_snippet_1
+
+LANGUAGE: javascript
+CODE:
+```
+import { Emitter } from '@socket.io/component-emitter';
+
+var emitter = new Emitter;
+emitter.emit('something');
+```
+
+----------------------------------------
+
+TITLE: Bundling JavaScript Code with Browserify - Bash
+DESCRIPTION: Command to bundle a JavaScript application file (`app.js`) that uses `require` statements into a single file (`bundle.js`) using Browserify, making it suitable for inclusion in a web page.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io-parser/Readme.md#_snippet_3
+
+LANGUAGE: Bash
+CODE:
+```
+$ browserify app.js > bundle.js
+```
+
+----------------------------------------
+
+TITLE: Example Socket.IO ACK Packet - JSON
+DESCRIPTION: Shows the JSON structure for an ACK packet ('type': 3) used to acknowledge a previously received EVENT or BINARY_EVENT packet that had an 'id'. It includes the namespace and the original packet's 'id'.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/socket.io-protocol/v3.md#_snippet_7
+
+LANGUAGE: json
+CODE:
+```
+{
+  "type": 3,
+  "nsp": "/admin",
+  "data": [],
+  "id": 456
+}
+```
+
+----------------------------------------
+
+TITLE: Running NestJS App in Production Mode using npm
+DESCRIPTION: This command starts the NestJS application optimized for a production environment. It usually involves compiling the code once and running the production-ready build.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/nestjs-example/README.md#_snippet_3
+
+LANGUAGE: bash
+CODE:
+```
+$ npm run start:prod
+```
+
+----------------------------------------
+
+TITLE: Starting Metro Bundler (React Native, Bash)
+DESCRIPTION: These commands start the Metro bundler, which is required to bundle JavaScript code for your React Native application. You should run this command from the root of your project in a dedicated terminal window.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/ReactNativeExample/README.md#_snippet_0
+
+LANGUAGE: bash
+CODE:
+```
+# using npm
+npm start
+```
+
+LANGUAGE: bash
+CODE:
+```
+# OR using Yarn
+yarn start
+```
+
+----------------------------------------
+
+TITLE: Example Engine.IO Handshake Payload (v6.2.0)
+DESCRIPTION: This snippet shows an example of the JSON payload sent during the engine.io handshake, illustrating the addition of the 'maxPayload' field in version 6.2.0. This field helps HTTP long-polling clients determine the maximum allowed packet size.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io/CHANGELOG.md#_snippet_4
+
+LANGUAGE: JSON
+CODE:
+```
+0{"sid":"lv_VI97HAXpY6yYWAAAC","upgrades":["websocket"],"pingInterval":25000,"pingTimeout":5000,"maxPayload":1000000}
+```
+
+----------------------------------------
+
+TITLE: Building and Running Socket.IO Webpack Server (Shell)
+DESCRIPTION: These commands guide the user through setting up and running the Socket.IO server project. They involve installing project dependencies, executing the Webpack build process defined in the package.json, and finally starting the server application.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/webpack-build-server/README.md#_snippet_0
+
+LANGUAGE: shell
+CODE:
+```
+$ npm i\n$ npm run build\n$ npm start
+```
+
+----------------------------------------
+
+TITLE: Building Socket.IO Bundle with Webpack and NPM - Shell
+DESCRIPTION: This snippet provides the shell commands required to install dependencies and build the Socket.IO browser bundle using Webpack. It first installs project dependencies via `npm i` and then runs the build script defined in `package.json` via `npm run build`.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/webpack-build/README.md#_snippet_0
+
+LANGUAGE: shell
+CODE:
+```
+$ npm i
+$ npm run build
+```
+
+----------------------------------------
+
+TITLE: Initiating Handshake via WebSocket
+DESCRIPTION: If the client initiates a WebSocket-only session, the initial handshake request is an HTTP GET using the websocket transport. A successful handshake results in an HTTP 101 Switching Protocols response, upgrading the connection.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/engine.io-protocol/v4-current.md#_snippet_3
+
+LANGUAGE: HTTP
+CODE:
+```
+CLIENT                                                    SERVER
+
+  │                                                          │
+  │        GET /engine.io/?EIO=4&transport=websocket         │
+  │ ───────────────────────────────────────────────────────► │
+  │ ◄──────────────────────────────────────────────────────┘ │
+  │                        HTTP 101                          │
+  │                                                          │
+```
+
+----------------------------------------
+
+TITLE: Running Server App - Bash
+DESCRIPTION: These bash commands guide the user to navigate into the 'server' directory, install its specific Node.js dependencies using npm, and finally execute the server startup script defined in the server's `package.json` file via `npm start`.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/nwjs-example/README.md#_snippet_1
+
+LANGUAGE: bash
+CODE:
+```
+cd server
+npm i
+npm start
+```
+
+----------------------------------------
+
+TITLE: Socket.IO BINARY_EVENT Packet Example - JSON Structure
+DESCRIPTION: Shows the conceptual JSON structure for a BINARY_EVENT packet ('type': 5) containing binary data, sent to the default namespace. Note that binary data is typically sent separately, with the JSON payload containing placeholders.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/socket.io-protocol/v3.md#_snippet_9
+
+LANGUAGE: json
+CODE:
+```
+{
+  "type": 5,
+  "nsp": "/",
+  "data": ["hello", "<Buffer 01 02 03>"]
+}
+```
+
+----------------------------------------
+
+TITLE: Initiating Handshake via HTTP Long-Polling
+DESCRIPTION: The default method for a client to establish an Engine.IO connection is by sending an initial HTTP GET request using the polling transport. The server responds with HTTP 200 and an 'open' packet payload if the connection is accepted.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/engine.io-protocol/v4-current.md#_snippet_2
+
+LANGUAGE: HTTP
+CODE:
+```
+CLIENT                                                    SERVER
+
+  │                                                          │
+  │        GET /engine.io/?EIO=4&transport=polling           │
+  │ ───────────────────────────────────────────────────────► │
+  │ ◄──────────────────────────────────────────────────────┘ │
+  │                        HTTP 200                          │
+  │                                                          │
+```
+
+----------------------------------------
+
+TITLE: Socket.IO EVENT Packet with Acknowledgement ID - JSON
+DESCRIPTION: Demonstrates an EVENT packet ('type': 2) sent to a specific namespace ('/admin') that requests an acknowledgement from the recipient. The unique 'id' field is included for the acknowledgement response.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/socket.io-protocol/v3.md#_snippet_6
+
+LANGUAGE: json
+CODE:
+```
+{
+  "type": 2,
+  "nsp": "/admin",
+  "data": ["project:delete", 123],
+  "id": 456
+}
+```
+
+----------------------------------------
+
+TITLE: Receiving Data via HTTP Long-Polling
+DESCRIPTION: For the client to receive data packets via HTTP long-polling, it makes an HTTP GET request. The server may hold the connection open until packets are available, then sends them in the response body with an HTTP 200 status.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/engine.io-protocol/v4-current.md#_snippet_1
+
+LANGUAGE: HTTP
+CODE:
+```
+CLIENT                                                SERVER
+
+  │   GET /engine.io/?EIO=4&transport=polling&sid=...   │
+  │ ──────────────────────────────────────────────────► │
+  │                                                   . │
+  │                                                   . │
+  │                                                   . │
+  │                                                   . │
+  │ ◄─────────────────────────────────────────────────┘ │
+  │                       HTTP 200                      │
+```
+
+----------------------------------------
+
+TITLE: Encoded Payload Example (Binary, Base64 Encoding)
+DESCRIPTION: This string shows the encoding format for a payload containing binary data when XHR2 is not supported. Binary data is base64 encoded, and the packet is prefixed with its character length and the 'b' identifier, concatenated with other string packets.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/engine.io-protocol/v3.md#_snippet_4
+
+LANGUAGE: text
+CODE:
+```
+2:4€10:b4AQIDBA==
+```
+
+----------------------------------------
+
+TITLE: Example Socket.IO ERROR Packet - JSON
+DESCRIPTION: Illustrates the JSON structure for an ERROR packet ('type': 4), typically sent by the server to indicate a failure, such as a refused namespace connection. It can include a descriptive payload.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/socket.io-protocol/v3.md#_snippet_8
+
+LANGUAGE: json
+CODE:
+```
+{
+  "type": 4,
+  "nsp": "/admin",
+  "data": "Not authorized"
+}
+```
+
+----------------------------------------
+
+TITLE: Generating Angular Component (CLI)
+DESCRIPTION: Use this command with the Angular CLI to generate a new component. Replace `component-name` with the desired name for your component.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/angular-todomvc/README.md#_snippet_2
+
+LANGUAGE: shell
+CODE:
+```
+ng generate component component-name
+```
+
+----------------------------------------
+
+TITLE: Running Angular End-to-End Tests (Shell)
+DESCRIPTION: Use this command to run end-to-end tests, which simulate user interaction with the application running in a real browser. Requires an end-to-end testing framework package to be installed.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/basic-crud-application/angular-client/README.md#_snippet_4
+
+LANGUAGE: Shell
+CODE:
+```
+ng e2e
+```
+
+----------------------------------------
+
+TITLE: Building Angular Project (CLI)
+DESCRIPTION: Compile the Angular project into output artifacts located in the `dist/` directory. This command prepares the application for deployment.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/angular-todomvc/README.md#_snippet_4
+
+LANGUAGE: shell
+CODE:
+```
+ng build
+```
+
+----------------------------------------
+
+TITLE: Building Angular Project (Shell)
+DESCRIPTION: Execute this command to compile the Angular project for deployment. The output (build artifacts) is placed in the 'dist/' directory, typically optimized for production use.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/basic-crud-application/angular-client/README.md#_snippet_2
+
+LANGUAGE: Shell
+CODE:
+```
+ng build
+```
+
+----------------------------------------
+
+TITLE: Running Socket.IO Tests (Bash)
+DESCRIPTION: This command executes the test suite for the Socket.IO project using npm. It runs the associated gulp task and by default tests the source code in the `lib` directory.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io/Readme.md#_snippet_9
+
+LANGUAGE: bash
+CODE:
+```
+npm test
+```
+
+----------------------------------------
+
+TITLE: Encoded EVENT Packet With Acknowledgement ID
+DESCRIPTION: Shows the default string encoding for an EVENT packet ('type': 2) to the '/admin' namespace with acknowledgment ID 456. The format is type, slash, namespace, comma, ID, and then the JSON payload.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/socket.io-protocol/v3.md#_snippet_15
+
+LANGUAGE: Socket.IO Encoding
+CODE:
+```
+2/admin,456["project:delete",123]
+```
+
+----------------------------------------
+
+TITLE: Encoded CONNECT Packet Admin Namespace
+DESCRIPTION: Shows the default string encoding format for a Socket.IO CONNECT packet ('type': 0) sent to the '/admin' namespace. The namespace is included after the type, separated by '/'.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/socket.io-protocol/v3.md#_snippet_12
+
+LANGUAGE: Socket.IO Encoding
+CODE:
+```
+0/admin
+```
+
+----------------------------------------
+
+TITLE: Encoded EVENT Packet Without Acknowledgement
+DESCRIPTION: Shows the default string encoding for an EVENT packet ('type': 2) to the default namespace ('/'). It's the type followed directly by the JSON-stringified payload.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/socket.io-protocol/v3.md#_snippet_14
+
+LANGUAGE: Socket.IO Encoding
+CODE:
+```
+2["hello",1]
+```
+
+----------------------------------------
+
+TITLE: Example Engine.IO Message Payload JSON
+DESCRIPTION: This JSON array represents a typical payload containing multiple message packets before encoding for transmission. Each object in the array corresponds to a single packet with a type and associated data.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/engine.io-protocol/v3.md#_snippet_1
+
+LANGUAGE: json
+CODE:
+```
+[
+  {
+    "type": "message",
+    "data": "hello"
+  },
+  {
+    "type": "message",
+    "data": "€"
+  }
+]
+```
+
+----------------------------------------
+
+TITLE: Encoded DISCONNECT Packet Admin Namespace
+DESCRIPTION: Shows the default string encoding format for a Socket.IO DISCONNECT packet ('type': 1) from the '/admin' namespace. It consists of the packet type followed by the namespace.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/socket.io-protocol/v3.md#_snippet_13
+
+LANGUAGE: Socket.IO Encoding
+CODE:
+```
+1/admin
+```
+
+----------------------------------------
+
+TITLE: Socket.IO BINARY_EVENT Packet with Ack ID - JSON Structure
+DESCRIPTION: Demonstrates the conceptual JSON structure for a BINARY_EVENT packet ('type': 5) with binary data and an acknowledgement ID ('id': 456), sent to the '/admin' namespace.
+SOURCE: https://github.com/socketio/socket.io/blob/main/docs/socket.io-protocol/v3.md#_snippet_10
+
+LANGUAGE: json
+CODE:
+```
+{
+  "type": 5,
+  "nsp": "/admin",
+  "data": ["project:delete", "<Buffer 01 02 03>"],
+  "id": 456
+}
+```
+
+----------------------------------------
+
+TITLE: Installing @socket.io/component-emitter using npm
+DESCRIPTION: This command installs the `@socket.io/component-emitter` library as a dependency in your project using the npm package manager. It is the first step required before using the library in your code.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io-component-emitter/Readme.md#_snippet_0
+
+LANGUAGE: bash
+CODE:
+```
+npm i @socket.io/component-emitter
+```
+
+----------------------------------------
+
+TITLE: Stopping Specific Service - Shell
+DESCRIPTION: This command stops a named service (`server-george`) within the running Docker Compose setup. It is provided as an example to test the application's resilience by stopping a single Socket.IO node and observing client reconnection. Requires Docker Compose to be active.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/cluster-haproxy/README.md#_snippet_1
+
+LANGUAGE: Shell
+CODE:
+```
+$ docker-compose stop server-george
+```
+
+----------------------------------------
+
+TITLE: Applying Code Formatting for Specific Workspace (Bash)
+DESCRIPTION: Executes the `format:fix` npm script for the `socket.io` workspace specifically. This allows contributors to format code only in the package they are modifying, which can be quicker during development.
+SOURCE: https://github.com/socketio/socket.io/blob/main/CONTRIBUTING.md#_snippet_4
+
+LANGUAGE: bash
+CODE:
+```
+npm run format:fix --workspace=socket.io
+```
+
+----------------------------------------
+
+TITLE: Running Node.js Tests - Shell
+DESCRIPTION: Command to execute the standard Node.js test suite defined in the project's `package.json` file, typically verifying the parser's functionality in a Node.js environment.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io-parser/Readme.md#_snippet_5
+
+LANGUAGE: Shell
+CODE:
+```
+npm test
+```
+
+----------------------------------------
+
+TITLE: Generating Changelog for Specific Package (Bash)
+DESCRIPTION: Changes directory into the `engine.io-client` package and then runs the `conventional-changelog` tool. It uses the `angular` preset, specifies the tag prefix for the package, and uses the current directory (`.`) as the commit path to generate the changelog based on commit history.
+SOURCE: https://github.com/socketio/socket.io/blob/main/CONTRIBUTING.md#_snippet_8
+
+LANGUAGE: bash
+CODE:
+```
+cd packages/engine.io-client
+conventional-changelog -p angular --tag-prefix "engine.io-client@" --commit-path .
+```
+
+----------------------------------------
+
+TITLE: Running Tests for All Workspaces (Bash)
+DESCRIPTION: Executes the `test` npm script for all workspaces in the monorepo. This command runs the test suites for every package simultaneously, which is crucial before submitting a pull request to ensure changes haven't introduced regressions anywhere.
+SOURCE: https://github.com/socketio/socket.io/blob/main/CONTRIBUTING.md#_snippet_5
+
+LANGUAGE: bash
+CODE:
+```
+npm test -ws
+```
+
+----------------------------------------
+
+TITLE: Compiling TypeScript for Specific Workspace (Bash)
+DESCRIPTION: Executes the `compile` npm script for a single, specified workspace within the monorepo. The `--workspace=socket.io` argument targets the `socket.io` package. This is useful for building only the part of the project you are actively working on.
+SOURCE: https://github.com/socketio/socket.io/blob/main/CONTRIBUTING.md#_snippet_2
+
+LANGUAGE: bash
+CODE:
+```
+npm run compile --workspace=socket.io
+```
+
+----------------------------------------
+
+TITLE: Getting Angular CLI Help (Shell)
+DESCRIPTION: Run this command to display help information about the Angular CLI and its commands. You can also append a command name (e.g., `ng help build`) to get help for a specific command.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/basic-crud-application/angular-client/README.md#_snippet_5
+
+LANGUAGE: Shell
+CODE:
+```
+ng help
+```
+
+----------------------------------------
+
+TITLE: Configuring CORS with handlePreflightRequest (Node.js)
+DESCRIPTION: Shows the old way (pre-4.0.0-alpha.0) of configuring CORS headers using the handlePreflightRequest option in the Engine.IO server. It manually sets headers for origin, methods, headers, and credentials within the request handler.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io/CHANGELOG.md#_snippet_6
+
+LANGUAGE: javascript
+CODE:
+```
+new Server({
+  handlePreflightRequest: (req, res) => {
+    res.writeHead(200, {
+      "Access-Control-Allow-Origin": 'https://example.com',
+      "Access-Control-Allow-Methods": 'GET',
+      "Access-Control-Allow-Headers": 'Authorization',
+      "Access-Control-Allow-Credentials": true
+    });
+    res.end();
+  }
+})
+```
+
+----------------------------------------
+
+TITLE: Setting up and Running Socket.IO Project - Shell
+DESCRIPTION: This snippet provides the command-line instructions to prepare and run the project. `npm link ../..` links a local version of the parent directory's package (likely the `socket.io` core) into the current directory's node_modules, allowing you to test local changes. `node index.js` then executes the main script file, starting the application or example.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io/examples/esm-import/README.md#_snippet_0
+
+LANGUAGE: Shell
+CODE:
+```
+$ npm link ../..
+$ node index.js
+```
+
+----------------------------------------
+
+TITLE: Running Tests for Specific Workspace (Bash)
+DESCRIPTION: Runs the `test` npm script specifically for the `socket.io` workspace. This allows contributors to focus on testing the changes within a single package during the development cycle, speeding up the testing process.
+SOURCE: https://github.com/socketio/socket.io/blob/main/CONTRIBUTING.md#_snippet_6
+
+LANGUAGE: bash
+CODE:
+```
+npm test --workspace=socket.io
+```
+
+----------------------------------------
+
+TITLE: Setting Up Development Environment - Bash
+DESCRIPTION: Sequence of commands to navigate into the cloned repository directory and install dependencies using `npm ci` (clean install), ensuring the development environment is ready.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io-parser/Readme.md#_snippet_8
+
+LANGUAGE: Bash
+CODE:
+```
+cd engine.io-parser
+npm ci
+```
+
+----------------------------------------
+
+TITLE: Compiling TypeScript for All Workspaces (Bash)
+DESCRIPTION: Runs the `compile` npm script across all workspaces in the Socket.IO monorepo using the `--workspace` flag. The `--if-present` flag ensures the command only runs if the script exists in a workspace's `package.json`. This is used to build the TypeScript source.
+SOURCE: https://github.com/socketio/socket.io/blob/main/CONTRIBUTING.md#_snippet_1
+
+LANGUAGE: bash
+CODE:
+```
+npm run compile -ws --if-present
+```
+
+----------------------------------------
+
+TITLE: Changing Import Style - JavaScript
+DESCRIPTION: Documents the breaking change in v3.0.0 where the `@socket.io/component-emitter` library switched from using a default export to a named export for the `Emitter` class. This requires updating import statements in JavaScript modules that use the library.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/socket.io-component-emitter/History.md#_snippet_1
+
+LANGUAGE: javascript
+CODE:
+```
+// before
+import Emitter from "@socket.io/component-emitter"
+```
+
+LANGUAGE: javascript
+CODE:
+```
+// after
+import { Emitter } from "@socket.io/component-emitter"
+```
+
+----------------------------------------
+
+TITLE: Installing Socket.IO Dependencies using npm ci (Bash)
+DESCRIPTION: Installs project dependencies for the Socket.IO monorepo using `npm ci`. This command is recommended for contributors as it ensures a clean and consistent installation based on the `package-lock.json` file. Requires Node.js version 18+ and npm version 7+.
+SOURCE: https://github.com/socketio/socket.io/blob/main/CONTRIBUTING.md#_snippet_0
+
+LANGUAGE: bash
+CODE:
+```
+npm ci
+```
+
+----------------------------------------
+
+TITLE: Running React Native App on iOS (Bash)
+DESCRIPTION: These commands build and run the React Native application on a connected iOS device or simulator. Ensure the Metro bundler is already running and you have an iOS development environment set up (requires macOS).
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/ReactNativeExample/README.md#_snippet_2
+
+LANGUAGE: bash
+CODE:
+```
+# using npm
+npm run ios
+```
+
+LANGUAGE: bash
+CODE:
+```
+# OR using Yarn
+yarn ios
+```
+
+----------------------------------------
+
+TITLE: Running Browser Tests Locally - Shell
+DESCRIPTION: Command to run the browser-based test suite for `engine.io-parser` locally, likely using a tool like Zuul as mentioned in the text.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io-parser/Readme.md#_snippet_6
+
+LANGUAGE: Shell
+CODE:
+```
+npm run test:browser
+```
+
+----------------------------------------
+
+TITLE: Cloning the Repository - Bash
+DESCRIPTION: Git command to clone the `engine.io-parser` source code repository from GitHub via the Git protocol, necessary for development and contributing patches.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io-parser/Readme.md#_snippet_7
+
+LANGUAGE: Bash
+CODE:
+```
+git clone git://github.com/socketio/engine.io-parser.git
+```
+
+----------------------------------------
+
+TITLE: Run Local Browser Tests using Zuul Bash
+DESCRIPTION: This command executes the browser test suite for engine.io-client locally using the zuul test runner. It starts a local server on port 8080 and runs the tests specified in test/index.js. This requires zuul to be installed and configured locally.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io-client/README.md#_snippet_6
+
+LANGUAGE: bash
+CODE:
+```
+./node_modules/.bin/zuul --local 8080 -- test/index.js
+
+```
+
+----------------------------------------
+
+TITLE: Encoding and Decoding a Single Packet - JavaScript
+DESCRIPTION: Demonstrates how to use the `encodePacket` and `decodePacket` methods to process a single engine.io packet, including handling binary data like a Node.js Buffer.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io-parser/Readme.md#_snippet_0
+
+LANGUAGE: JavaScript
+CODE:
+```
+const parser = require("engine.io-parser");
+const data = Buffer.from([ 1, 2, 3, 4 ]);
+
+parser.encodePacket({ type: "message", data }, encoded => {
+  const decodedData = parser.decodePacket(encoded); // decodedData === data
+});
+```
+
+----------------------------------------
+
+TITLE: Getting Angular CLI Help
+DESCRIPTION: Display help information and available commands for the Angular CLI. Useful for understanding command options and usage.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/angular-todomvc/README.md#_snippet_8
+
+LANGUAGE: shell
+CODE:
+```
+ng help
+```
+
+----------------------------------------
+
+TITLE: Generating Various Angular Schematics (CLI)
+DESCRIPTION: This command allows generating various Angular artifacts like directives, pipes, services, classes, guards, interfaces, enums, or modules using the Angular CLI.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/angular-todomvc/README.md#_snippet_3
+
+LANGUAGE: shell
+CODE:
+```
+ng generate directive|pipe|service|class|guard|interface|enum|module
+```
+
+----------------------------------------
+
+TITLE: Building Angular Project for Production (CLI)
+DESCRIPTION: Build the Angular project with production optimizations. This command generates smaller, more efficient code suitable for a production environment, also outputting to `dist/`.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/angular-todomvc/README.md#_snippet_5
+
+LANGUAGE: shell
+CODE:
+```
+ng build --prod
+```
+
+----------------------------------------
+
+TITLE: Installing conventional-changelog CLI Globally (Bash)
+DESCRIPTION: Installs the `conventional-changelog-cli` npm package globally using the `-g` flag. This command makes the `conventional-changelog` executable available in the system's PATH, allowing it to be run from any directory.
+SOURCE: https://github.com/socketio/socket.io/blob/main/CONTRIBUTING.md#_snippet_7
+
+LANGUAGE: bash
+CODE:
+```
+npm i -g conventional-changelog-cli
+```
+
+----------------------------------------
+
+TITLE: Running Angular Unit Tests (Karma)
+DESCRIPTION: Execute the project's unit tests using the configured test runner, typically Karma. This command provides feedback on code correctness at the unit level.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/angular-todomvc/README.md#_snippet_6
+
+LANGUAGE: shell
+CODE:
+```
+ng test
+```
+
+----------------------------------------
+
+TITLE: Generating Angular Component (Shell)
+DESCRIPTION: Use the 'generate' command with 'component' to create a new component in the Angular project. The CLI handles creating the component files (TS, HTML, CSS/SCSS, spec) and updating the nearest module.
+SOURCE: https://github.com/socketio/socket.io/blob/main/examples/basic-crud-application/angular-client/README.md#_snippet_1
+
+LANGUAGE: Shell
+CODE:
+```
+ng generate component component-name
+```
+
+----------------------------------------
+
+TITLE: Configuring Cookie Options Directly (Node.js)
+DESCRIPTION: Illustrates the previous approach (pre-4.0.0-alpha.0) for setting Engine.IO cookie properties directly as top-level options (cookieName, cookieHttpOnly, cookiePath) when creating a new server instance.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io/CHANGELOG.md#_snippet_8
+
+LANGUAGE: javascript
+CODE:
+```
+new Server({
+  cookieName: "test",
+  cookieHttpOnly: false,
+  cookiePath: "/custom"
+})
+```
+
+----------------------------------------
+
+TITLE: Installing Engine.IO Parser via npm - Shell
+DESCRIPTION: Command to install the `engine.io-parser` package using the Node Package Manager (npm), typically for use in Node.js or browser environments with bundlers like Browserify.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io-parser/Readme.md#_snippet_1
+
+LANGUAGE: Shell
+CODE:
+```
+npm install engine.io-parser
+```
+
+----------------------------------------
+
+TITLE: Change Directory to Project Root Bash
+DESCRIPTION: This command changes the current working directory to the root directory of the cloned engine.io-client repository. This is necessary before running further commands within the project context, such as installing dependencies or running tests.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io-client/README.md#_snippet_9
+
+LANGUAGE: bash
+CODE:
+```
+cd engine.io-client
+
+```
+
+----------------------------------------
+
+TITLE: Clone Engine.IO Client Repository Bash
+DESCRIPTION: This command clones the official engine.io-client Git repository from GitHub. This is the initial step for developers wanting to contribute to the project. It requires Git to be installed on the system.
+SOURCE: https://github.com/socketio/socket.io/blob/main/packages/engine.io-client/README.md#_snippet_8
+
+LANGUAGE: bash
+CODE:
+```
+git clone git://github.com/socketio/engine.io-client.git
+
+```
