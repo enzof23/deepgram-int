@@ -1,27 +1,28 @@
 'use client';  
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { io, Socket } from 'socket.io-client';
+import React, { createContext, useContext, useMemo } from 'react';
+import { io } from 'socket.io-client';
+
+import type { TypedSocket } from '../types/socket';
 
 interface SocketContextType {
-  socket: Socket | null;
+  socket: TypedSocket | null;
 }
 
-const SocketContext = createContext<SocketContextType | undefined>(undefined);
+const SocketContext = createContext<SocketContextType | null>(null);
 
-export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  
-  const [socket, setSocket] = useState<Socket | null>(null);
+export const SocketProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
+const socket = useMemo(() => {
+  return io("http://localhost:3005", { autoConnect: false }) as TypedSocket;
+}, []);
 
-  useEffect(() => {
-    const socketInstance = io("http://localhost:3005");
+React.useEffect(() => {
+  socket.connect();
 
-    setSocket(socketInstance);
-
-    return () => {
-      socketInstance.disconnect();
-    };
-  }, []);
+  return () => {
+    socket.disconnect();
+  }
+}, [socket]);
 
   return (
     <SocketContext.Provider value={{ socket }}>
@@ -30,7 +31,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   );
 };
 
-export const useSocket = (): Socket|null => {
+export const useSocket = (): TypedSocket|null => {
   const context = useContext(SocketContext);
   if (!context) {
     throw new Error('useSocket must be used within a SocketProvider');

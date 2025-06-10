@@ -1,17 +1,44 @@
 import { Server, Socket } from "socket.io";
 import { createClient, LiveClient, LiveTranscriptionEvents} from "@deepgram/sdk";
+import { z } from "zod";
+
 import dotenv from "dotenv";
 
 dotenv.config();
 
-const socketHandler = (socket: Socket, io: Server) => {
+interface ServerToClientEvents {
+  caption: (caption: string) => void;
+  lesson_started: () => void;
+  lesson_ended: () => void;
+  error: (error: string) => void;
+}
+
+interface ClientToServerEvents {
+  join_room: (roomID: string) => void;
+  start_lesson: () => void;
+  send_audio: (audioData: Buffer) => void;
+  stop_lesson: () => void;
+}
+
+const roomIDSchema = z.string().min(1);
+
+export type TypedSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
+
+const socketHandler = (socket: TypedSocket, io: Server) => {
   console.log("A user connected:", socket.id);
   let connection: LiveClient;
   let keepAlive: NodeJS.Timeout;
 
   socket.on("join_room", (roomID) => {
-    socket.join(roomID);
-    console.log(`User ${socket.id} joined room ${roomID}`);
+    try {
+      const validatedRoomId = roomIDSchema.parse(roomID);
+      socket.join(validatedRoomId);
+      console.log(`User ${socket.id} joined room ${validatedRoomId}`);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        socket.emit("error", "Invalid room ID");
+      }
+    }
   });
 
   socket.on("start_lesson", () => {
@@ -22,7 +49,7 @@ const socketHandler = (socket: Socket, io: Server) => {
     connection = deepgram.listen.live({
       smart_format: true,      
       model: "nova-3",
-      language: "en-US",
+      language: "en-AU",
       diarize: true,
     });
 
@@ -37,7 +64,7 @@ const socketHandler = (socket: Socket, io: Server) => {
 
     connection.on(LiveTranscriptionEvents.Open, () => {
       console.log("Deepgram Connection opened");
-      // send a message to the client that lesson has started
+      // socket.emit("lesson_started");
     });
 
     // audio transcript returns from deepgram and is sent to the client
@@ -51,19 +78,23 @@ const socketHandler = (socket: Socket, io: Server) => {
 
     connection.on(LiveTranscriptionEvents.Error, (error) => {
       console.error("Deepgram Error:", error);
+      // socket.emit("error", "Transcription error occured");
     });
 
     connection.on(LiveTranscriptionEvents.Close, () => {
       console.log("Deepgram Connection closed");
       clearInterval(keepAlive);
+      // socket.emit("lesson_ended");
     });
   });
 
   // audio is received from the client and sent to deepgram
   socket.on("send_audio", (audioData) => {
-    if(connection && connection.getReadyState() === 1) {
-      connection.send(audioData);
-    }
+    console.log("Audio received in backend")
+      if (connection && connection.getReadyState() === 1) {
+        console.log("Sending audio to deepgram")
+        connection.send(audioData);
+      }
   });
 
   socket.on("stop_lesson", () => {
@@ -78,12 +109,15 @@ const socketHandler = (socket: Socket, io: Server) => {
     if(connection) {
       connection.requestClose();
     }
+    if(keepAlive) {
+      clearInterval(keepAlive);
+    }
   });
 }
 
 const PORT = 3005;
 
-const io = new Server(PORT,{
+const io = new Server<ClientToServerEvents, ServerToClientEvents>(PORT,{
   cors: {
     origin: "*",
     methods: ["GET", "POST"],
@@ -93,6 +127,5 @@ const io = new Server(PORT,{
 io.on('connection', (socket) => {
   socketHandler(socket, io)
 });
-
 
 console.log(`Server running on port ${PORT}`);
