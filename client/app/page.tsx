@@ -16,7 +16,7 @@ const startRecording = async () => {
     setIsRecording(true);
     
     if(socket) {
-        socket.emit("start");
+        socket.emit("start_lesson");
 
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
@@ -35,7 +35,7 @@ const startRecording = async () => {
 
             mediaRecorder.ondataavailable = (event) => {
                 if(event.data.size > 0 && socket.connected) {
-                    socket.emit("audio", event.data);
+                    socket.emit("send_audio", event.data);
                 }
             }
 
@@ -44,7 +44,7 @@ const startRecording = async () => {
             })
 
             mediaRecorder.onstop = () => {
-                socket.emit("stop");
+                socket.emit("stop_lesson");
                 setIsRecording(false)
             }
 

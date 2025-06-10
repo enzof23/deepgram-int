@@ -9,20 +9,13 @@ const socketHandler = (socket: Socket, io: Server) => {
   let connection: LiveClient;
   let keepAlive: NodeJS.Timeout;
 
-  socket.on("disconnect", () => {
-    console.log("A user disconnected:", socket.id);
-    if(connection) {
-      connection.requestClose();
-    }
-  });
-
-  socket.on("join", (roomID) => {
+  socket.on("join_room", (roomID) => {
     socket.join(roomID);
     console.log(`User ${socket.id} joined room ${roomID}`);
   });
-  
-  socket.on("start", () => {
-    console.log("Starting transcription...");
+
+  socket.on("start_lesson", () => {
+    console.log("Starting lesson...");
     
     const deepgram = createClient(process.env.DEEPGRAM_API_KEY);
   
@@ -33,7 +26,9 @@ const socketHandler = (socket: Socket, io: Server) => {
       diarize: true,
     });
 
-    if(keepAlive) clearInterval(keepAlive);
+    if (keepAlive) clearInterval(keepAlive);
+
+    // prevent deepgram from closing the connection after 10sec of silence
     keepAlive = setInterval(() => {
       console.log("Keep Alive");
       connection.keepAlive();
@@ -42,17 +37,14 @@ const socketHandler = (socket: Socket, io: Server) => {
 
     connection.on(LiveTranscriptionEvents.Open, () => {
       console.log("Deepgram Connection opened");
+      // send a message to the client that lesson has started
     });
 
-    connection.on(LiveTranscriptionEvents.Close, () => {
-      console.log("Deepgram Connection closed");
-      clearInterval(keepAlive);
-    });
-
-   connection.on(LiveTranscriptionEvents.Transcript, (data) => {
+    // audio transcript returns from deepgram and is sent to the client
+    connection.on(LiveTranscriptionEvents.Transcript, (data) => {
       const transcript = data.channel.alternatives[0].transcript;
       console.log("Deepgram Transcript:", transcript);
-      if(transcript) {
+      if (transcript) {
         socket.emit("caption", transcript);
       }
     });
@@ -60,20 +52,33 @@ const socketHandler = (socket: Socket, io: Server) => {
     connection.on(LiveTranscriptionEvents.Error, (error) => {
       console.error("Deepgram Error:", error);
     });
-  })
 
-  socket.on("audio", (audioData) => {
+    connection.on(LiveTranscriptionEvents.Close, () => {
+      console.log("Deepgram Connection closed");
+      clearInterval(keepAlive);
+    });
+  });
+
+  // audio is received from the client and sent to deepgram
+  socket.on("send_audio", (audioData) => {
     if(connection && connection.getReadyState() === 1) {
       connection.send(audioData);
     }
-  })
+  });
 
-  socket.on("stop", () => {
+  socket.on("stop_lesson", () => {
     if(connection) {
       connection.requestClose();
-      console.log("Transcription stopped");
+      console.log("Lesson stopped");
     }
-  })
+  });
+
+  socket.on("disconnect", () => {
+    console.log("A user disconnected:", socket.id);
+    if(connection) {
+      connection.requestClose();
+    }
+  });
 }
 
 const PORT = 3005;
