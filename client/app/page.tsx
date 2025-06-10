@@ -1,46 +1,55 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useSocket } from "./context/socket";
-import { useMicrophone } from "./hook/use-mic";
 
 
 export default function Home() {
 const [caption, setCaption] = useState<string>("");
+const [recording, setRecording] = useState<boolean>(false);
+const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 
 const socket = useSocket();
-const { openMic, closeMic, micStatus} = useMicrophone();
 
 const startRecording = async () => {
-    setCaption("");
+  if(!socket) return;
+
+  setCaption("");
+  setRecording(true);
+  
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     
-    if(socket) {
-       const recorder = await openMic();
-       socket.emit("start_lesson");
+    const mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm;codecs=opus" });
+    mediaRecorderRef.current = mediaRecorder;
+    mediaRecorder.start(250);
+    
+    socket.emit("start_lesson");
+    
+    console.log("Recording started");
 
-      if(recorder) {
-        console.log("hello")
-        recorder.ondataavailable = (event) => {
-          if(event.data.size > 0 && socket.connected) {
-            console.log("Sending audio to backend")
-            socket.emit("send_audio", event.data);
-          }
-        };
-
-        recorder.onstop = () => {
-          socket.emit("stop_lesson");
-          console.log("Lesson stopped")
-        }
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0 && socket.connected) {
+        socket.emit("send_audio", event.data);
       }
+    };
 
-        // socket.on('caption', (caption) => {
-        //     setCaption((prevCaption) => `${prevCaption} ${caption}`);
-        // })
-    }
+    mediaRecorder.onstop = () => {
+      socket.emit("stop_lesson");
+      setRecording(false);
+
+      console.log("Recording stopped");
+    };
+  } catch (error) {
+    console.error("Error starting recording:", error);
+    setRecording(false);
+  }
 };
 
 const stopRecording = () => {
-   closeMic();
+  if(mediaRecorderRef.current) {
+    mediaRecorderRef.current.stop();
+  }
 }
 
 useEffect(() => {
@@ -61,7 +70,7 @@ useEffect(() => {
 return (
     <div className="grid place-items-center h-screen">
         <div className="flex flex-col gap-4">   
-            <button className="p-2 bg-blue-500 text-white rounded w-fit mx-auto px-4" onClick={micStatus === "recording" ? stopRecording : startRecording}>{micStatus === "recording" ? "Stop" : "Start"} transcript</button>
+            <button className="p-2 bg-blue-500 text-white rounded w-fit mx-auto px-4" onClick={recording ? stopRecording : startRecording}>{recording ? "Stop" : "Start"} transcript</button>
             <p className="text-center">{caption || "Press 'Start Recording' and begin speaking..."}</p>
         </div>
     </div>
